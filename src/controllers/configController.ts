@@ -6,16 +6,16 @@ const GLOBAL_DEFAULTS = {
   spread_sell: 50,
   fee_rate_buy: 0.008,
   fee_rate_sell: 0.008,
-  usdc_min_fee: 5000,
-  xlm_min_fee: 5000,
+  usdt_min_fee: 5000,
+  avax_min_fee: 5000,
 };
 
 async function buildConfigSnapshot() {
   const [flatConfig, tokenConfigs] = await Promise.all([getAllConfig(), getAllTokenConfigs()]);
-  const usdcBuy = tokenConfigs['USDC']?.buy;
-  const usdcSell = tokenConfigs['USDC']?.sell;
-  const xlmBuy = tokenConfigs['XLM']?.buy;
-  const xlmSell = tokenConfigs['XLM']?.sell;
+  const usdtBuy = tokenConfigs['USDT']?.buy;
+  const usdtSell = tokenConfigs['USDT']?.sell;
+  const avaxBuy = tokenConfigs['AVAX']?.buy;
+  const avaxSell = tokenConfigs['AVAX']?.sell;
 
   const num = (key: keyof typeof GLOBAL_DEFAULTS) => {
     const value = flatConfig[key];
@@ -28,22 +28,22 @@ async function buildConfigSnapshot() {
     spread_sell: num('spread_sell'),
     fee_rate_buy: num('fee_rate_buy'),
     fee_rate_sell: num('fee_rate_sell'),
-    usdc_min_fee: num('usdc_min_fee'),
-    xlm_min_fee: num('xlm_min_fee'),
-    usdc_spread_buy: usdcBuy?.spread ?? 50,
-    usdc_spread_sell: usdcSell?.spread ?? 50,
-    usdc_fee_rate_buy: usdcBuy?.fee_rate ?? 0.008,
-    usdc_fee_rate_sell: usdcSell?.fee_rate ?? 0.008,
-    usdc_min_order_amount: usdcBuy?.min_order_amount ?? 1,
-    usdc_source_buy: usdcBuy?.source,
-    usdc_source_sell: usdcSell?.source,
-    xlm_spread_buy: xlmBuy?.spread ?? 50,
-    xlm_spread_sell: xlmSell?.spread ?? 50,
-    xlm_fee_rate_buy: xlmBuy?.fee_rate ?? 0.008,
-    xlm_fee_rate_sell: xlmSell?.fee_rate ?? 0.008,
-    xlm_min_order_amount: xlmBuy?.min_order_amount ?? 1,
-    xlm_source_buy: xlmBuy?.source,
-    xlm_source_sell: xlmSell?.source,
+    usdt_min_fee: num('usdt_min_fee'),
+    avax_min_fee: num('avax_min_fee'),
+    usdt_spread_buy: usdtBuy?.spread ?? 50,
+    usdt_spread_sell: usdtSell?.spread ?? 50,
+    usdt_fee_rate_buy: usdtBuy?.fee_rate ?? 0.008,
+    usdt_fee_rate_sell: usdtSell?.fee_rate ?? 0.008,
+    usdt_min_order_amount: usdtBuy?.min_order_amount ?? 1,
+    usdt_source_buy: usdtBuy?.source,
+    usdt_source_sell: usdtSell?.source,
+    avax_spread_buy: avaxBuy?.spread ?? 50,
+    avax_spread_sell: avaxSell?.spread ?? 50,
+    avax_fee_rate_buy: avaxBuy?.fee_rate ?? 0.008,
+    avax_fee_rate_sell: avaxSell?.fee_rate ?? 0.008,
+    avax_min_order_amount: avaxBuy?.min_order_amount ?? 1,
+    avax_source_buy: avaxBuy?.source,
+    avax_source_sell: avaxSell?.source,
   };
 }
 
@@ -93,12 +93,12 @@ interface PatchBody {
   spread_sell?: number;
   fee_rate_buy?: number;
   fee_rate_sell?: number;
-  usdc_min_fee?: number;
-  xlm_min_fee?: number;
-  USDC_buy?: TokenSidePatch;
-  USDC_sell?: TokenSidePatch;
-  XLM_buy?: TokenSidePatch;
-  XLM_sell?: TokenSidePatch;
+  usdt_min_fee?: number;
+  avax_min_fee?: number;
+  USDT_buy?: TokenSidePatch;
+  USDT_sell?: TokenSidePatch;
+  AVAX_buy?: TokenSidePatch;
+  AVAX_sell?: TokenSidePatch;
 }
 
 export async function handlePatchConfig(
@@ -122,18 +122,18 @@ export async function handlePatchConfig(
   if (typeof body.fee_rate_sell === 'number') {
     updates.push(updateConfig('fee_rate_sell', String(body.fee_rate_sell), changedBy));
   }
-  if (typeof body.usdc_min_fee === 'number') {
-    updates.push(updateConfig('usdc_min_fee', String(body.usdc_min_fee), changedBy));
+  if (typeof body.usdt_min_fee === 'number') {
+    updates.push(updateConfig('usdt_min_fee', String(body.usdt_min_fee), changedBy));
   }
-  if (typeof body.xlm_min_fee === 'number') {
-    updates.push(updateConfig('xlm_min_fee', String(body.xlm_min_fee), changedBy));
+  if (typeof body.avax_min_fee === 'number') {
+    updates.push(updateConfig('avax_min_fee', String(body.avax_min_fee), changedBy));
   }
 
   const tokenSidePairs: Array<[token: string, side: 'buy' | 'sell', patch?: TokenSidePatch]> = [
-    ['USDC', 'buy', body.USDC_buy],
-    ['USDC', 'sell', body.USDC_sell],
-    ['XLM', 'buy', body.XLM_buy],
-    ['XLM', 'sell', body.XLM_sell],
+    ['USDT', 'buy', body.USDT_buy],
+    ['USDT', 'sell', body.USDT_sell],
+    ['AVAX', 'buy', body.AVAX_buy],
+    ['AVAX', 'sell', body.AVAX_sell],
   ];
 
   for (const [token, side, patch] of tokenSidePairs) {

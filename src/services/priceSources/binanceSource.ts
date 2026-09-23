@@ -58,8 +58,8 @@ interface PriceCache {
 let priceCache = new Map<string, PriceCache>();
 
 const FALLBACK_PRICES: Record<string, number> = {
-  USDC: 26500,
-  XLM: 7500,
+  AVAX: 3_700_000,
+  USDT: 26_500,
 };
 
 export async function binanceSource(asset: string, config: Record<string, unknown>): Promise<PriceSourceResult> {

@@ -22,7 +22,6 @@ Production image uses multi-stage build (builder → production). Migration runs
 npm run dev              # tsx watch — restarts on file changes
 npm run build            # tsc → dist/
 npm run start            # node dist/server.js
-npm run worker:disburse  # Kafka consumer for USDC disbursement
 npm run migrate          # knex migrate:latest --knexfile src/knexfile.ts
 npm run migrate:rollback # knex migrate:rollback --knexfile src/knexfile.ts
 npm run wallet:add       # add/update wallet (scripts/add-wallet.ts)
@@ -51,10 +50,11 @@ No lint, test, or format scripts are configured.
 | `/api/rate` | `routes/priceRoutes.ts` | `controllers/priceController.ts` | None |
 | `/config` | `routes/configRoutes.ts` | `controllers/configController.ts` | JWT (write) |
 | `/api/orders` | `routes/orderRoutes.ts` | `controllers/orderController.ts` | **Partner-App-Key** |
+| `/api/partners` | `routes/partnerRoutes.ts` | `controllers/partnerController.ts` | **Partner-App-Key** |
 | `/api/webhooks` | `routes/webhookRoutes.ts` | `controllers/webhookController.ts` | Apikey / Webhook signature |
 
 **Workers:**
-- `cchain-listener/src/index.ts` — polls the C-Chain for custodial sell deposits (USDT `Transfer` logs + native AVAX balance deltas), sweeps to the Master Wallet, and completes sell orders. Run as a separate process (compose/PM2).
+- `cchain-listener/src/index.ts` — polls the C-Chain for custodial sell deposits (USDT `Transfer` logs + native AVAX balance deltas), sweeps to the Master Wallet, and completes sell orders. Run as a separate process (compose/PM2), **or** in-process in the API by setting `CCHAIN_LISTENER_IN_API=true` (see `services/cchainListenerLoop.ts`). The standalone worker and the in-process loop share the same code path; enable the flag in exactly one process per deployment.
 
 **Layers:**
 - `controllers/` — request handlers, delegate to services
@@ -64,6 +64,29 @@ No lint, test, or format scripts are configured.
 - `middlewares/` — errorHandler, sepayAuth, adminAuth, partnerAuth, chainWebhookAuth
 
 **API docs** served at `/docs` (Swagger UI).
+
+## Service boundary: `web-be`
+
+The user-facing surface lives in a separate service, `web-be/` (sibling
+directory). It owns Google login, user profiles, KYC ID recognition, payment
+methods, and the `/api/me/orders/*` proxy. Those routes are **not** served by
+`payment_svc` anymore:
+
+- Moved out: `controllers/{auth,me,user}Controller.ts`,
+  `routes/{auth,me,user}Routes.ts`, `services/{user,paymentMethod,googleAuth,idRecognition,geminiVision,ocrSpace,cccdParser,s3}Service.ts`,
+  `middlewares/{userAuth,kycCheck}.ts`, migrations `020`/`021`/`023`.
+- The partner-authenticated `POST /api/orders/deposit_v2` and
+  `POST /api/orders/withdrawal_v2` were **removed** (they depended on user data
+  now owned by `web-be`). Partners use the V1 endpoints or `web-be`'s
+  `/api/me/orders/*`.
+- `orders.user_id` is a plain integer with no FK; it is a logical reference to
+  `web-be.users.id` (schema owned by `web-be` in the same database).
+- `web-be` verifies `Partner-App-Key` by calling `payment_svc`'s
+  `GET /api/partners/verify` (partner-authenticated) and proxies
+  `/api/me/orders/*` back to `payment_svc`'s `/api/orders/*` using
+  `PAYMENT_SVC_BASE_URL` + `PAYMENT_SVC_PARTNER_APP_KEY`.
+- `GET /api/orders` and `GET /api/orders/:id` accept an optional `user_id`
+  query param so `web-be` can scope results to the authenticated user.
 
 ## Authentication
 
@@ -180,7 +203,6 @@ All errors return standardized format with `X-Trace-ID` header:
 - `encryptionService.ts` — AES-256-GCM encrypt/decrypt for wallet secrets
 - `callbackService.ts` — webhook callback with retry (3×), logging, HMAC signature, dual-secret rotation
 - `sepayService.ts` — webhook handler, deduplication
-- `idRecognitionService.ts` — KYC recognition facade: routes via `ID_RECOGNITION_PROVIDER` (hybrid default) with OCR.space fast path and Gemini fallback
 - `cchainWalletService.ts` — provision per-sell-order custodial 0x deposit wallets; AES-256-GCM at rest
 - `cchainRpcService.ts` — viem public/wallet clients for C-Chain EVM RPC + native USDT contract helpers
 - `cchainListenerService.ts` — poll custodial addresses for native AVAX + USDT `Transfer` deposits, dedupe, confirmations
@@ -190,9 +212,6 @@ All errors return standardized format with `X-Trace-ID` header:
 - `cchainPayoutService.ts` — C-Chain buy payout: EIP-1559 native AVAX / ERC-20 USDT transfers to the recipient `0x` address, balance preflight, confirmations, idempotency, failure marking, stuck-order recovery (`initCchainPayout`, `sweepStuckCchainPayouts`)
 - `cchainPayoutAccount.ts` — payout signer: viem account backed by GCP KMS secp256k1 (raw-key `CCHAIN_PAYOUT_WALLET_PRIVATE_KEY` fallback); derives the payout `0x` address
 - `cchainUnits.ts` — token-aware decimal conversion (AVAX 18, USDT 6) with precision validation
-- `ocrSpaceService.ts` — OCR.space API client (fast path): multipart POST, `language=vnm`, retry + timeout
-- `cccdParser.ts` — CCCD text parser: diacritic-tolerant fuzzy labels, date/sex normalization, TD1 MRZ cross-validation
-- `geminiVisionService.ts` — Gemini vision fallback for KYC ID recognition (supersedes legacy `fptAiVisionService.ts`, which is deprecated and unused)
 
 ## Key Tables
 
@@ -248,13 +267,8 @@ All via `import 'dotenv/config'`. See `.env.example`:
 | `GCP_KMS_KEY_ID` | KMS crypto key (e.g. avax-hotwallet-kr) |
 | `GCP_KMS_KEY_VERSION` | KMS key version (default: 1) — the payout `0x` address is derived from the KMS key; no address env var is kept |
 | `ADMIN_JWT_SECRET` | JWT signing secret for admin routes |
-| `GOOGLE_AI_API_KEY` | Google AI API key — Gemini fallback for KYC ID recognition |
-| `GEMINI_MODEL` | Gemini vision model for ID recognition (default: gemini-3.6-flash) |
-| `OCR_SPACE_API_KEY` | ocr.space API key — fast-path KYC recognition (free: 500 req/day/IP) |
-| `OCR_SPACE_ENDPOINT` | ocr.space endpoint (default: https://api.ocr.space/parse/image) |
-| `OCR_SPACE_ENGINE` | ocr.space engine 1\|2\|3 (default: 2) |
-| `OCR_SPACE_TIMEOUT_MS` | ocr.space request timeout (default: 12000) |
-| `ID_RECOGNITION_PROVIDER` | hybrid \| ocrspace \| gemini (default: hybrid) |
+
+> KYC/AWS/Google/`USER_JWT_*` env vars moved to `web-be` (see `web-be/.env.example`).
 
 ## C-Chain buy payout (Avalanche EVM)
 
@@ -288,8 +302,9 @@ Correlation: a confirmed, swept deposit maps by `orders.recipient = deposit addr
 → completes the sell order once (idempotent). Key services:
 `cchainWalletService`, `cchainRpcService`, `cchainListenerService`,
 `cchainSweepService`, `cchainOrderService`, `cchainEmitService`; migration
-`029..031` add `custodial_wallets` + `cchain_deposits`; `cchain-listener/` worker
-(PM2/compose) polls the C-Chain.
+`029..031` add `custodial_wallets` + `cchain_deposits`; the `cchain-listener/`
+worker (PM2/compose) polls the C-Chain, or the API does when
+`CCHAIN_LISTENER_IN_API=true` (`services/cchainListenerLoop.ts`).
 
 C-Chain env (see `.env.example`):
 
@@ -305,6 +320,7 @@ C-Chain env (see `.env.example`):
 | `CUSTODIAL_KEY_ENCRYPTION_KEY` | ≥32-char AES-256-GCM key for custodial keys at rest |
 | `CCHAIN_LISTENER_FALLBACK_URL` | HTTP fallback (e.g. `/api/webhooks/cchain-incoming`) |
 | `CCHAIN_LISTENER_FALLBACK_AUTH_TOKEN` | Bearer token for the fallback webhook |
+| `CCHAIN_LISTENER_IN_API` | Run the deposit poll loop inside the API process instead of the `cchain-listener` worker (default: false; enable in exactly one process) |
 | `CCHAIN_PAYOUT_WALLET_PRIVATE_KEY` | Payout wallet key (0x hex) — dev/local fallback; prefers GCP KMS |
 | `CCHAIN_PAYOUT_CONFIRMATIONS` | Blocks before a buy payout is final (default: 1) |
 | `CCHAIN_AVAX_GAS_RESERVE_WEI` | AVAX (wei) kept for USDT payout gas (default: 0.01 AVAX) |
@@ -330,9 +346,5 @@ C-Chain env (see `.env.example`):
 
 ## Integration
 
-See `docs/API_INTEGRATION.md` for full API documentation including:
-- All endpoints with request/response examples
-- Authentication details
-- Callback signature verification code
-- Error codes
-- Complete flow diagrams
+Full API documentation (endpoints, authentication, callbacks, error codes,
+flow diagrams) is served interactively at `/docs` (Swagger UI).

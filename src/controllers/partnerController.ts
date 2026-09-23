@@ -62,6 +62,18 @@ export async function handleListPartners(
   reply.send({ success: true, data: partners.map(serializePartner) });
 }
 
+/**
+ * Partner-authenticated key check. `partnerAuth` has already validated the
+ * `partner-app-key` header, so this echoes the resolved partner context for
+ * callers that need to verify a key (e.g. web-be).
+ */
+export async function handleVerifyPartner(
+  req: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  reply.send({ success: true, data: req.partner ?? null });
+}
+
 export async function handleGetPartner(
   req: FastifyRequest<{ Params: { id: string } }>,
   reply: FastifyReply,

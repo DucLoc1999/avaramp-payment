@@ -49,8 +49,8 @@ const configResponseSchema = {
         configs: {
           type: 'object',
           properties: {
-            usdc: tokenConfigSchema,
-            xlm: tokenConfigSchema,
+            usdt: tokenConfigSchema,
+            avax: tokenConfigSchema,
           },
         },
       },
@@ -373,7 +373,7 @@ export async function cmsRoutes(app: FastifyInstance): Promise<void> {
     schema: {
       tags: ['CMS'],
       summary: 'Get per-token fee and spread configuration',
-      description: 'Returns current per-token (USDC, XLM) config for spreads, fee rates, min/max order amounts, and price sources. Creates default values if not yet set.',
+      description: 'Returns current per-token (USDT, AVAX) config for spreads, fee rates, min/max order amounts, and price sources. Creates default values if not yet set.',
       security: [{ BearerAuth: [] }],
       response: { 200: configResponseSchema },
     },
@@ -390,8 +390,8 @@ export async function cmsRoutes(app: FastifyInstance): Promise<void> {
         type: 'object',
         additionalProperties: false,
         properties: {
-          usdc: tokenPatchSchema,
-          xlm: tokenPatchSchema,
+          usdt: tokenPatchSchema,
+          avax: tokenPatchSchema,
         },
       },
       response: {
@@ -461,8 +461,8 @@ export async function cmsRoutes(app: FastifyInstance): Promise<void> {
   app.get('/rates', {
     schema: {
       tags: ['CMS'],
-      summary: 'Get current buy and sell rates for USDC and XLM (public)',
-      description: 'No authentication required. Returns our current buy/sell rates for USDC and XLM.',
+      summary: 'Get current buy and sell rates for USDT and AVAX (public)',
+      description: 'No authentication required. Returns our current buy/sell rates for USDT and AVAX.',
       response: {
         200: {
           type: 'object',
@@ -471,8 +471,8 @@ export async function cmsRoutes(app: FastifyInstance): Promise<void> {
             data: {
               type: 'object',
               properties: {
-                usdc: { type: 'object', properties: { buy: { type: 'number' }, sell: { type: 'number' } } },
-                xlm:  { type: 'object', properties: { buy: { type: 'number' }, sell: { type: 'number' } } },
+                usdt: { type: 'object', properties: { buy: { type: 'number' }, sell: { type: 'number' } } },
+                avax:  { type: 'object', properties: { buy: { type: 'number' }, sell: { type: 'number' } } },
               },
             },
           },

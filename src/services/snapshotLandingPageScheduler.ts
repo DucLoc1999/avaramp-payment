@@ -19,7 +19,7 @@ interface UsdRateResponse {
   rates: { VND: number };
 }
 
-const ASSETS = ['USDC', 'XLM'] as const;
+const ASSETS = ['USDT', 'AVAX'] as const;
 
 async function fetchBinancePrices(asset: string): Promise<{ buy: number | null; sell: number | null }> {
   const opts = { asset, rows: 20, merchantCheck: true, publisherType: 'merchant', transAmount: '150000000' };

@@ -76,8 +76,8 @@ if (!dbReadOnly) {
         our:     { buyBase: 25_600, sellBase: 25_950, drift: 300 },
       };
       const MOCK_ASSETS = {
-        USDC: { buyBase: 25_700, sellBase: 25_900, drift: 300 },
-        XLM:  { buyBase: 7_500, sellBase: 7_700, drift: 120 },
+        USDT: { buyBase: 25_700, sellBase: 25_900, drift: 300 },
+        AVAX: { buyBase: 3_700_000, sellBase: 3_750_000, drift: 40_000 },
       } as const;
       const now = Date.now();
 
@@ -86,11 +86,11 @@ if (!dbReadOnly) {
         const noise = Math.sin(day * 0.7) * 0.5 + Math.cos(day * 1.3) * 0.5;
         for (const exchange of ['binance', 'okx', 'bybit', 'our'] as Exchange[]) {
           const { buyBase, sellBase, drift } = MOCK_CONFIG[exchange];
-          insert.run(exchange, 'buy', 'USDC', 'VND', Math.round(buyBase + noise * drift), ts);
-          insert.run(exchange, 'sell', 'USDC', 'VND', Math.round(sellBase + noise * drift), ts);
-          const xlm = MOCK_ASSETS.XLM;
-          insert.run(exchange, 'buy', 'XLM', 'VND', Math.round(xlm.buyBase + noise * xlm.drift), ts);
-          insert.run(exchange, 'sell', 'XLM', 'VND', Math.round(xlm.sellBase + noise * xlm.drift), ts);
+          insert.run(exchange, 'buy', 'USDT', 'VND', Math.round(buyBase + noise * drift), ts);
+          insert.run(exchange, 'sell', 'USDT', 'VND', Math.round(sellBase + noise * drift), ts);
+          const avax = MOCK_ASSETS.AVAX;
+          insert.run(exchange, 'buy', 'AVAX', 'VND', Math.round(avax.buyBase + noise * avax.drift), ts);
+          insert.run(exchange, 'sell', 'AVAX', 'VND', Math.round(avax.sellBase + noise * avax.drift), ts);
         }
       }
 
@@ -99,11 +99,11 @@ if (!dbReadOnly) {
         const noise = Math.sin(hour * 0.9) * 0.5 + Math.cos(hour * 0.4) * 0.5;
         for (const exchange of ['binance', 'okx', 'bybit', 'our'] as Exchange[]) {
           const { buyBase, sellBase, drift } = MOCK_CONFIG[exchange];
-          insert.run(exchange, 'buy', 'USDC', 'VND', Math.round(buyBase + noise * drift * 0.3), ts);
-          insert.run(exchange, 'sell', 'USDC', 'VND', Math.round(sellBase + noise * drift * 0.3), ts);
-          const xlm = MOCK_ASSETS.XLM;
-          insert.run(exchange, 'buy', 'XLM', 'VND', Math.round(xlm.buyBase + noise * xlm.drift * 0.3), ts);
-          insert.run(exchange, 'sell', 'XLM', 'VND', Math.round(xlm.sellBase + noise * xlm.drift * 0.3), ts);
+          insert.run(exchange, 'buy', 'USDT', 'VND', Math.round(buyBase + noise * drift * 0.3), ts);
+          insert.run(exchange, 'sell', 'USDT', 'VND', Math.round(sellBase + noise * drift * 0.3), ts);
+          const avax = MOCK_ASSETS.AVAX;
+          insert.run(exchange, 'buy', 'AVAX', 'VND', Math.round(avax.buyBase + noise * avax.drift * 0.3), ts);
+          insert.run(exchange, 'sell', 'AVAX', 'VND', Math.round(avax.sellBase + noise * avax.drift * 0.3), ts);
         }
       }
     }
@@ -121,7 +121,7 @@ export function insertSnapshot(snapshot: P2PSnapshot): void {
   db.prepare('DELETE FROM p2p_prices WHERE created_at < ?').run(now - THIRTY_DAYS_MS);
 }
 
-export function getHistory(exchange: Exchange, days: number, asset: string = 'USDC'): HistoryRow[] {
+export function getHistory(exchange: Exchange, days: number, asset: string = 'USDT'): HistoryRow[] {
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
   const bucketMs = days === 1 ? 60_000 : 86_400_000;
   return db.prepare(`
@@ -136,7 +136,7 @@ export function getHistory(exchange: Exchange, days: number, asset: string = 'US
   `).all(exchange, asset, cutoff) as unknown as HistoryRow[];
 }
 
-export function getLatestPrice(exchange: Exchange, tradeType: TradeType, asset: string = 'USDC'): number | null {
+export function getLatestPrice(exchange: Exchange, tradeType: TradeType, asset: string = 'USDT'): number | null {
   const row = db.prepare(`
     SELECT best_price, created_at FROM p2p_prices
     WHERE exchange = ? AND trade_type = ? AND asset = ?

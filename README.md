@@ -53,7 +53,9 @@ Confirmed fiat payments are executed on the Avalanche C-Chain by the payout serv
 Every order state change is POSTed to your URL, HMAC-signed, retried (up to 3×), logged, and protected against replay within a 5-minute window.
 
 ### 5. Full Admin & CMS
-Operate config, secret rotation, statistics, partners, and KYC users through admin routes — with a JWT-secured control plane.
+Operate config, secret rotation, statistics, and partners through admin routes — with a JWT-secured control plane.
+
+> User accounts, Google login, KYC ID recognition, and payment methods now live in the separate **`web-be`** service. `AvaRamp` stays partner-facing and settlement-focused.
 
 ## 🚀 Quick Start
 
@@ -89,6 +91,12 @@ DB_HOST=127.0.0.1 DB_USER=admin DB_PASSWORD=123456 DB_NAME=avaramp \
 npm run dev              # API server
 npx tsx cchain-listener/src/index.ts  # C-Chain deposit listener (sells)
 ```
+
+Alternatively, run the deposit listener inside the API process by setting
+`CCHAIN_LISTENER_IN_API=true` and skipping the separate worker. Enable it in
+**exactly one** process per deployment — each running loop polls the C-Chain
+independently, so multiple API replicas would duplicate scans. The flag defaults
+to `false`, preserving the separate-worker setup.
 
 ## 💵 Usage / Data Flows
 
@@ -157,15 +165,21 @@ All C-Chain transactions use **EIP-1559** gas (`maxFeePerGas` + `maxPriorityFeeP
 | Prefix | Purpose | Auth |
 |---|---|---|
 | `/api/orders` | Deposit / withdrawal / status / cancel | Partner-App-Key |
+| `/api/partners` | Verify a Partner-App-Key (used by web-be) | Partner-App-Key |
 | `/api/rate` | Live buy & sell rates | Partner-App-Key |
-| `/api/users` | KYC + payment methods | Partner-App-Key |
 | `/api/webhooks` | SePay, SePay IPN, C-Chain incoming | API key / signature |
 | `/config` | Fee & spread config | JWT (write) |
 | `/admin` | Login, stats, secret rotation | JWT |
 | `/cms` | Admin management, orders, partners | JWT |
 | `/landing` | Public rates & history | None |
 
-Full request/response examples live in [`docs/API_INTEGRATION.md`](docs/API_INTEGRATION.md). Interactive docs at `/docs` (Swagger UI).
+> **Moved to `web-be`:** `/api/auth/*`, `/api/me/*`, and `/api/users/*` (Google
+> login, user profile, KYC ID recognition, payment methods). The partner-facing
+> `/api/orders/deposit_v2` and `/api/orders/withdrawal_v2` endpoints were
+> **removed**; partners should use the V1 endpoints or route through `web-be`'s
+> `/api/me/orders/*`.
+
+Full request/response examples are served interactively at `/docs` (Swagger UI).
 
 ## 🧭 Order Lifecycle
 
@@ -201,9 +215,31 @@ docker compose up -d --build
 ```
 
 - `avaramp-api` — Fastify API (healthchecked at `/health`)
-- `cchain-listener` — C-Chain deposit monitor (Kafka or HTTP fallback)
+- `cchain-listener` — C-Chain deposit monitor (Kafka or HTTP fallback). Can be
+  folded into `avaramp-api` by setting `CCHAIN_LISTENER_IN_API=true` on the API
+  and dropping this service (single-instance only).
+
+`web-be` is a **separate deployment** with its own compose files in
+[`../web-be`](../web-be) and can run on a different server.
 
 Migrations run in-process on startup, so production needs no `tsx`. Secrets are injected via `.env`.
+
+### Routing `web-be` vs `payment_svc`
+
+The two stacks are deployed independently. If they share a public hostname, the
+gateway routes by path:
+
+| Path | Routes to |
+|---|---|
+| `/api/auth/*`, `/api/me/*`, `/api/users/*` | `web-be` (`:3002` on its server) |
+| everything else (`/api/orders/*`, `/api/webhooks/*`, `/api/rate/*`, `/admin/*`, `/cms/*`, `/landing/*`, `/config/*`, `/health`) | `avaramp-api` (`:3000` on its server) |
+
+If the two stacks run on different servers, point the gateway at each server's
+address. This keeps `@avarampl`'s `VITE_BASE_URL` unchanged. Alternatively,
+give `web-be` its own public host and set `VITE_BASE_URL` to it. `web-be`
+forwards `/api/me/orders/*` to `payment_svc` using `PAYMENT_SVC_BASE_URL` +
+`PAYMENT_SVC_PARTNER_APP_KEY` (a public URL when the stacks are on separate
+servers).
 
 ## 📁 Project Structure
 
@@ -215,12 +251,10 @@ avaramp/
 │   ├── controllers/            # Request handlers
 │   ├── services/               # Business logic (order, price, callback, cchain…)
 │   ├── routes/                 # Route + JSON Schema definitions
-│   ├── middleware/             # Auth + error handling
-│   ├── workers/disburseWorker.ts # Kafka disbursement consumer
+│   ├── middlewares/            # Auth + error handling
 │   ├── migrations/             # Knex schema migrations
 │   └── db.ts                   # Shared Knex singleton
 ├── cchain-listener/            # C-Chain incoming-deposit monitor
-├── docs/API_INTEGRATION.md     # Full API reference for partners
 └── dist/                       # Compiled output (build)
 ```
 

@@ -12,7 +12,7 @@ export async function bypassRoutes(app: FastifyInstance): Promise<void> {
     schema: {
       tags: ['Bypass'],
       summary: 'Bypass buy order payment (dev/test only)',
-      description: '**For testing only.** Skips SePay webhook confirmation for buy orders. Directly moves order to PROCESSING and triggers USDC disbursement. Requires ADMIN_BOOTSTRAP_PASSWORD. Do not expose in production.',
+      description: '**For testing only.** Skips SePay webhook confirmation for buy orders. Directly moves order to PROCESSING and triggers C-Chain crypto disbursement. Requires ADMIN_BOOTSTRAP_PASSWORD. Do not expose in production.',
       body: {
         type: 'object',
         required: ['admin_key', 'order_id'],

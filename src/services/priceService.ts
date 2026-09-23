@@ -26,7 +26,7 @@ export interface QuoteResult {
   note: string;
 }
 
-const DEFAULT_ASSET = 'USDC';
+const DEFAULT_ASSET = 'USDT';
 
 export async function getRate(asset: string = DEFAULT_ASSET): Promise<RateResult> {
   const [prices, spreadBuy, spreadSell, feeRateBuy, feeRateSell] = await Promise.all([

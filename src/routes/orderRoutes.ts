@@ -3,8 +3,7 @@ import {
   type DepositRequest,
   type WithdrawalRequest,
 } from '../services/orderService';
-import type { DepositV2Request, WithdrawalV2Request } from '../models/types';
-import { handleDeposit, handleWithdrawal, handleDepositV2, handleWithdrawalV2, handleListOrders, handleGetOrder, handleCancel, handleOrderSuccess, handleOrderError, handleOrderCancel } from '../controllers/orderController';
+import { handleDeposit, handleWithdrawal, handleListOrders, handleGetOrder, handleCancel, handleOrderSuccess, handleOrderError, handleOrderCancel } from '../controllers/orderController';
 import { partnerAuth } from '../middlewares/partnerAuth';
 
 export async function orderRoutes(app: FastifyInstance): Promise<void> {
@@ -71,7 +70,7 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
         properties: {
           amount: { type: 'string', description: 'Amount of crypto to sell. Must be positive number string.' },
           chain_id: { type: 'integer', description: 'Avalanche C-Chain id (43113 Fuji, 43114 Mainnet)' },
-          token_address: { type: 'string', description: 'Token issuer. Required for USDC. Use empty string "" for XLM native.' },
+          token_address: { type: 'string', description: 'Token contract address. Required for USDT (ERC-20). Use empty string "" for native AVAX.' },
           asset_code: { type: 'string', description: 'Asset code: "AVAX" (native) or "USDT" (ERC-20)' },
           callback: { type: 'string', description: 'HTTPS webhook URL. Called on every order state change with HMAC signature.' },
           user_id: { type: 'string', description: 'Optional client-side user ID.' },
@@ -117,110 +116,11 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
     },
   }, handleWithdrawal);
 
-  app.post<{ Body: DepositV2Request }>('/deposit_v2', {
-    preHandler: partnerAuth,
-    schema: {
-      security: [{ PartnerAppKey: [] }],
-      tags: ['Orders V2'],
-      summary: 'Create a deposit order using user payment method (buy AVAX/USDT)',
-      description: 'Creates a buy order using a registered CRYPTO payment method. Validates that payment_method_id belongs to user_id and has type CRYPTO. Uses wallet_address from the payment method as recipient.',
-      body: {
-        type: 'object',
-        required: ['amount', 'chain_id', 'asset_code', 'callback', 'user_id', 'payment_method_id'],
-        properties: {
-          amount: { type: 'string', description: 'Amount of crypto to buy (e.g. "100"). Must be positive number string.' },
-          chain_id: { type: 'integer', description: 'Avalanche C-Chain id (43113 Fuji, 43114 Mainnet)' },
-          token_address: { type: 'string', description: 'C-Chain ERC-20 contract. Use the native USDT contract, or empty string "" for native AVAX.' },
-          asset_code: { type: 'string', description: 'Asset code: "AVAX" (native) or "USDT" (ERC-20)' },
-          callback: { type: 'string', description: 'HTTPS webhook URL. Called on every order state change with HMAC signature.' },
-          user_id: { type: 'integer', description: 'ID of the registered user' },
-          payment_method_id: { type: 'integer', description: 'ID of user CRYPTO payment method (must belong to user_id)' },
-          pay_gateway: { type: 'string', enum: ['bank', 'napas'], default: 'bank', description: 'Payment gateway: bank (static SePay QR, default) or napas (SePay PG NAPAS checkout with VietQR).' },
-        },
-      },
-      response: {
-        200: {
-          type: 'object',
-          description: 'Order created. Use `body.bankInfo` to show bank transfer details.',
-          properties: {
-            success: { type: 'boolean' },
-            data: { type: 'object', additionalProperties: true },
-          },
-        },
-        400: {
-          type: 'object',
-          description: 'Validation or business logic error.',
-          properties: {
-            success: { type: 'boolean' },
-            error: {
-              type: 'object',
-              properties: {
-                code: { type: 'string' },
-                message: { type: 'string' },
-                retriable: { type: 'boolean' },
-                trace_id: { type: 'string' },
-              },
-            },
-          },
-        },
-      },
-    },
-  }, handleDepositV2);
-
-  app.post<{ Body: WithdrawalV2Request }>('/withdrawal_v2', {
-    preHandler: partnerAuth,
-    schema: {
-      security: [{ PartnerAppKey: [] }],
-      tags: ['Orders V2'],
-      summary: 'Create a withdrawal order using user payment method (sell AVAX/USDT)',
-      description: 'Creates a sell order using a registered BANK payment method. Validates that payment_method_id belongs to user_id and has type BANK. Uses bank info from the payment method for VND payout.',
-      body: {
-        type: 'object',
-        required: ['amount', 'chain_id', 'asset_code', 'callback', 'user_id', 'payment_method_id'],
-        properties: {
-          amount: { type: 'string', description: 'Amount of crypto to sell. Must be positive number string.' },
-          chain_id: { type: 'integer', description: 'Avalanche C-Chain id (43113 Fuji, 43114 Mainnet)' },
-          token_address: { type: 'string', description: 'Token issuer. Required for USDC. Use empty string "" for XLM native.' },
-          asset_code: { type: 'string', description: 'Asset code: "AVAX" (native) or "USDT" (ERC-20)' },
-          callback: { type: 'string', description: 'HTTPS webhook URL. Called on every order state change with HMAC signature.' },
-          user_id: { type: 'integer', description: 'ID of the registered user' },
-          payment_method_id: { type: 'integer', description: 'ID of user BANK payment method (must belong to user_id)' },
-        },
-      },
-      response: {
-        200: {
-          type: 'object',
-          description: 'Order created. Use `pay_data.address` (C-Chain 0x deposit address) for the crypto transfer.',
-          properties: {
-            success: { type: 'boolean' },
-            data: { type: 'object', additionalProperties: true },
-          },
-        },
-        400: {
-          type: 'object',
-          description: 'Validation or business logic error.',
-          properties: {
-            success: { type: 'boolean' },
-            error: {
-              type: 'object',
-              properties: {
-                code: { type: 'string' },
-                message: { type: 'string' },
-                retriable: { type: 'boolean' },
-                trace_id: { type: 'string' },
-              },
-            },
-          },
-        },
-      },
-    },
-  }, handleWithdrawalV2);
-
-  app.get<{ Querystring: { limit?: string; offset?: string; direction?: string } }>('/', {
+  app.get<{ Querystring: { limit?: string; offset?: string; direction?: string; user_id?: string } }>('/', {
     schema: {
       tags: ['Orders'],
       summary: 'List orders',
-      description: 'Returns paginated orders, sorted by updated_at descending. No authentication required.',
+      description: 'Returns paginated orders, sorted by updated_at descending. No authentication required. Pass user_id to scope results to a single registered user (used by web-be).',
       querystring: {
         type: 'object',
         additionalProperties: false,
@@ -228,6 +128,7 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
           limit: { type: 'string', description: 'Max results (default 20, max 100)' },
           offset: { type: 'string', description: 'Offset for pagination (default 0)' },
           direction: { type: 'string', enum: ['buy', 'sell'], description: 'Filter by direction: buy (deposit) or sell (withdrawal)' },
+          user_id: { type: 'string', description: 'Scope results to a single user ID (web-be passes the authenticated user).' },
         },
       },
       response: {
@@ -260,17 +161,24 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
     },
   }, handleListOrders);
 
-  app.get<{ Params: { id: string } }>('/:id', {
+  app.get<{ Params: { id: string }; Querystring: { user_id?: string } }>('/:id', {
     preHandler: partnerAuth,
     schema: {
       security: [{ PartnerAppKey: [] }],
       tags: ['Orders'],
       summary: 'Get order status',
-      description: 'Fetches current order state and details. Accepts numeric order ID or payment code (e.g. DHA1B2C3D4).',
+      description: 'Fetches current order state and details. Accepts numeric order ID or payment code (e.g. DHA1B2C3D4). Pass user_id to enforce ownership (web-be passes the authenticated user); a mismatched order returns 404.',
       params: {
         type: 'object',
         properties: {
           id: { type: 'string', description: 'Order ID (numeric) or payment code (e.g. DHA1B2C3D4)' },
+        },
+      },
+      querystring: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          user_id: { type: 'string', description: 'Enforce that the order belongs to this user ID (web-be passes the authenticated user).' },
         },
       },
       response: {

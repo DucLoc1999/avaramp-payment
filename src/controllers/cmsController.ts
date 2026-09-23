@@ -76,7 +76,7 @@ export async function handleCreateAdmin(
   return reply.code(201).send({ success: true, data: { id, email } });
 }
 
-const TOKENS = ['usdc', 'xlm'] as const;
+const TOKENS = ['usdt', 'avax'] as const;
 type Token = typeof TOKENS[number];
 
 type SidePatch = { spread?: number; fee_rate?: number; min_fee?: number; min_order_amount?: number; max_order_amount?: number; source?: string };
@@ -217,7 +217,7 @@ export async function handleGetBuyOrders(
     payment_code: r.payment_code,
     transaction_hash: r.transaction_hash,
     recipient: r.recipient,
-    usdc_amount: r.usdt_amount,
+    usdt_amount: r.usdt_amount,
     asset_code: r.asset_code,
     rate: r.rate,
     net_vnd: r.net_vnd,
@@ -252,7 +252,7 @@ export async function handleGetSellOrders(
     updated_at: r.updated_at,
     payment_code: r.payment_code,
     transaction_hash: r.transaction_hash,
-    usdc_amount: r.usdt_amount,
+    usdt_amount: r.usdt_amount,
     asset_code: r.asset_code,
     rate: r.rate,
     net_vnd: r.net_vnd,
@@ -268,12 +268,12 @@ export async function handleGetRates(
   _req: FastifyRequest,
   reply: FastifyReply,
 ) {
-  const [usdc, xlm] = await Promise.all([getRate('USDC'), getRate('XLM')]);
+  const [usdt, avax] = await Promise.all([getRate('USDT'), getRate('AVAX')]);
   reply.send({
     success: true,
     data: {
-      usdc: { buy: usdc.buy_price, sell: usdc.sell_price },
-      xlm: { buy: xlm.buy_price, sell: xlm.sell_price },
+      usdt: { buy: usdt.buy_price, sell: usdt.sell_price },
+      avax: { buy: avax.buy_price, sell: avax.sell_price },
     },
   });
 }

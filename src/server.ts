@@ -3,6 +3,7 @@ import { buildApp } from './app';
 import { logger } from './config/logger';
 import { appConfig } from './config/app';
 import { initCchainPayout, sweepStuckCchainPayouts } from './services/cchainPayoutService';
+import { startCchainListenerLoop, stopCchainListenerLoop } from './services/cchainListenerLoop';
 import { initKafka, disconnectKafka } from './services/queueService';
 import { startSnapshotScheduler } from './services/snapshotLandingPageScheduler';
 import { startOrderExpiryScheduler } from './services/orderExpiryScheduler';
@@ -38,6 +39,7 @@ async function gracefulShutdown(signal: string) {
     if (expiryInterval) clearInterval(expiryInterval);
     for (const interval of reservationIntervals) clearInterval(interval);
     await shutdownReservationService();
+    stopCchainListenerLoop();
     await db.destroy();
     if (app && app.close) {
       await app.close();
@@ -72,6 +74,20 @@ async function start() {
 
   // Recover C-Chain payouts left in-flight after a crash/restart.
   await sweepStuckCchainPayouts();
+
+  // Optionally run the custodial deposit poll loop in this process instead of a
+  // separate `cchain-listener` worker. Enable in exactly one process per
+  // deployment (see CCHAIN_LISTENER_IN_API).
+  if (process.env.CCHAIN_LISTENER_IN_API === 'true') {
+    try {
+      startCchainListenerLoop();
+    } catch (error) {
+      logger.warn(
+        { error: error instanceof Error ? error.message : String(error) },
+        'C-Chain listener loop failed to start; run the standalone cchain-listener worker instead'
+      );
+    }
+  }
 
   const builtApp = await buildApp();
   app = builtApp as typeof app;

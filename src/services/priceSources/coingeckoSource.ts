@@ -12,8 +12,7 @@ let priceCache = new Map<string, PriceCache>();
 
 const DEFAULT_ASSET_MAP: Record<string, string> = {
   AVAX: 'avalanche-2',
-  XLM: 'stellar',
-  USDC: 'usd-coin',
+  USDT: 'tether',
 };
 
 export interface CoinGeckoSourceConfig {

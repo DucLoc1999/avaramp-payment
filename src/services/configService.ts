@@ -38,16 +38,16 @@ function envFallback(key: ConfigKey, fallback: number): number {
     spread_sell: 'SPREAD_SELL',
     fee_rate_buy: 'FEE_RATE_BUY',
     fee_rate_sell: 'FEE_RATE_SELL',
-    usdc_spread_buy: 'USDC_SPREAD_BUY',
-    usdc_spread_sell: 'USDC_SPREAD_SELL',
-    usdc_fee_rate_buy: 'USDC_FEE_RATE_BUY',
-    usdc_fee_rate_sell: 'USDC_FEE_RATE_SELL',
-    xlm_spread_buy: 'XLM_SPREAD_BUY',
-    xlm_spread_sell: 'XLM_SPREAD_SELL',
-    xlm_fee_rate_buy: 'XLM_FEE_RATE_BUY',
-    xlm_fee_rate_sell: 'XLM_FEE_RATE_SELL',
-    usdc_min_fee: 'USDC_MIN_FEE_VND',
-    xlm_min_fee: 'XLM_MIN_FEE_VND',
+    usdt_spread_buy: 'USDT_SPREAD_BUY',
+    usdt_spread_sell: 'USDT_SPREAD_SELL',
+    usdt_fee_rate_buy: 'USDT_FEE_RATE_BUY',
+    usdt_fee_rate_sell: 'USDT_FEE_RATE_SELL',
+    avax_spread_buy: 'AVAX_SPREAD_BUY',
+    avax_spread_sell: 'AVAX_SPREAD_SELL',
+    avax_fee_rate_buy: 'AVAX_FEE_RATE_BUY',
+    avax_fee_rate_sell: 'AVAX_FEE_RATE_SELL',
+    usdt_min_fee: 'USDT_MIN_FEE_VND',
+    avax_min_fee: 'AVAX_MIN_FEE_VND',
     min_fee_vnd: 'MIN_FEE_VND',
   };
   const envKey = envMap[key] || key.toUpperCase().replace(/[.-]/g, '_');
@@ -123,7 +123,7 @@ const DEFAULT_TOKEN_CONFIG: TokenSideConfig = {
   max_order_amount: 100,
 };
 
-const SUPPORTED_TOKENS = ['AVAX'];
+const SUPPORTED_TOKENS = ['AVAX', 'USDT'];
 
 export async function getTokenSideConfigFromDb(token: string, side: TokenSide): Promise<TokenSideConfig | null> {
   const key = `${token.toUpperCase()}_${side}`;

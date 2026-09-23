@@ -5,8 +5,8 @@ export async function handleGetRate(
   req: FastifyRequest,
   reply: FastifyReply,
 ) {
-  const rate = await getRate('USDC');
-  const minFee = await getMinFee('USDC');
+  const rate = await getRate('USDT');
+  const minFee = await getMinFee('USDT');
   const partner = req.partner;
   const partnerFeeBuy = partner?.fee_buy ?? 0;
   const partnerFeeSell = partner?.fee_sell ?? 0;
@@ -21,12 +21,12 @@ export async function handleGetRate(
   });
 }
 
-export async function handleGetXlmRate(
+export async function handleGetAvaxRate(
   req: FastifyRequest,
   reply: FastifyReply,
 ) {
-  const rate = await getRate('XLM');
-  const minFee = await getMinFee('XLM');
+  const rate = await getRate('AVAX');
+  const minFee = await getMinFee('AVAX');
   const partner = req.partner;
   const partnerFeeBuy = partner?.fee_buy ?? 0;
   const partnerFeeSell = partner?.fee_sell ?? 0;

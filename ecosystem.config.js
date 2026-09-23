@@ -32,6 +32,22 @@ module.exports = {
       error_file: "./logs/cchain-listener-err.log",
       out_file: "./logs/cchain-listener-out.log",
       log_date_format: "YYYY-MM-DD HH:mm:ss"
+    },
+    {
+      name: "web-be",
+      script: "./dist/server.js",
+      cwd: "/mnt/code/be/web-be",
+      instances: 1,
+      exec_mode: "fork",
+      watch: false,
+      max_memory_restart: "500M",
+      env: {
+        NODE_ENV: "production",
+        PORT: 3002
+      },
+      error_file: "./logs/err.log",
+      out_file: "./logs/out.log",
+      log_date_format: "YYYY-MM-DD HH:mm:ss"
     }
   ]
 }

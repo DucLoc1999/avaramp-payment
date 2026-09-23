@@ -4,7 +4,7 @@ import { getRate, getMinFee } from '../services/priceService';
 
 async function handleAllRates(_request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const exchanges: Exchange[] = ['binance', 'okx', 'bybit'];
-  const assets = ['USDC', 'XLM'] as const;
+  const assets = ['USDT', 'AVAX'] as const;
 
   const p2p: Record<string, Record<string, { bestBuyPrice: number | null; bestSellPrice: number | null }>> = {};
   for (const ex of exchanges) {
@@ -17,25 +17,25 @@ async function handleAllRates(_request: FastifyRequest, reply: FastifyReply): Pr
     }
   }
 
-  const [usdcRate, xlmRate] = await Promise.all([getRate('USDC'), getRate('XLM')]);
-  const [usdcMinFee, xlmMinFee] = await Promise.all([getMinFee('USDC'), getMinFee('XLM')]);
+  const [usdtRate, avaxRate] = await Promise.all([getRate('USDT'), getRate('AVAX')]);
+  const [usdtMinFee, avaxMinFee] = await Promise.all([getMinFee('USDT'), getMinFee('AVAX')]);
 
   const our = {
-    usdc: {
-      buy: usdcRate.buy_price,
-      sell: usdcRate.sell_price,
-      fee_rate_buy: usdcRate.fee_rate_buy,
-      fee_rate_sell: usdcRate.fee_rate_sell,
-      min_fee_vnd: usdcMinFee,
-      created_at: usdcRate.updated_at,
+    usdt: {
+      buy: usdtRate.buy_price,
+      sell: usdtRate.sell_price,
+      fee_rate_buy: usdtRate.fee_rate_buy,
+      fee_rate_sell: usdtRate.fee_rate_sell,
+      min_fee_vnd: usdtMinFee,
+      created_at: usdtRate.updated_at,
     },
-    xlm: {
-      buy: xlmRate.buy_price,
-      sell: xlmRate.sell_price,
-      fee_rate_buy: xlmRate.fee_rate_buy,
-      fee_rate_sell: xlmRate.fee_rate_sell,
-      min_fee_vnd: xlmMinFee,
-      created_at: xlmRate.updated_at,
+    avax: {
+      buy: avaxRate.buy_price,
+      sell: avaxRate.sell_price,
+      fee_rate_buy: avaxRate.fee_rate_buy,
+      fee_rate_sell: avaxRate.fee_rate_sell,
+      min_fee_vnd: avaxMinFee,
+      created_at: avaxRate.updated_at,
     },
   };
 
@@ -58,7 +58,7 @@ export async function landingRoutes(app: FastifyInstance): Promise<void> {
     schema: {
       tags: ['Landing Page'],
       summary: 'Get all P2P rates (Binance, OKX, Bybit, our service)',
-      description: 'Returns best buy and sell prices from Binance, OKX, Bybit P2P markets plus our service rates for USDC and XLM. No authentication required.',
+      description: 'Returns best buy and sell prices from Binance, OKX, Bybit P2P markets plus our service rates for USDT and AVAX. No authentication required.',
       response: {
         200: {
           type: 'object',
@@ -66,14 +66,14 @@ export async function landingRoutes(app: FastifyInstance): Promise<void> {
             binance: {
               type: 'object',
               properties: {
-                usdc: {
+                usdt: {
                   type: 'object',
                   properties: {
                     bestBuyPrice: { type: 'number', nullable: true, description: 'Best buy price (null if no offers)' },
                     bestSellPrice: { type: 'number', nullable: true, description: 'Best sell price (null if no offers)' },
                   },
                 },
-                xlm: {
+                avax: {
                   type: 'object',
                   properties: {
                     bestBuyPrice: { type: 'number', nullable: true },
@@ -85,14 +85,14 @@ export async function landingRoutes(app: FastifyInstance): Promise<void> {
             okx: {
               type: 'object',
               properties: {
-                usdc: {
+                usdt: {
                   type: 'object',
                   properties: {
                     bestBuyPrice: { type: 'number', nullable: true },
                     bestSellPrice: { type: 'number', nullable: true },
                   },
                 },
-                xlm: {
+                avax: {
                   type: 'object',
                   properties: {
                     bestBuyPrice: { type: 'number', nullable: true },
@@ -104,14 +104,14 @@ export async function landingRoutes(app: FastifyInstance): Promise<void> {
             bybit: {
               type: 'object',
               properties: {
-                usdc: {
+                usdt: {
                   type: 'object',
                   properties: {
                     bestBuyPrice: { type: 'number', nullable: true },
                     bestSellPrice: { type: 'number', nullable: true },
                   },
                 },
-                xlm: {
+                avax: {
                   type: 'object',
                   properties: {
                     bestBuyPrice: { type: 'number', nullable: true },
@@ -123,7 +123,7 @@ export async function landingRoutes(app: FastifyInstance): Promise<void> {
             our: {
               type: 'object',
               properties: {
-                usdc: {
+                usdt: {
                   type: 'object',
                   properties: {
                     buy: { type: 'number' },
@@ -134,7 +134,7 @@ export async function landingRoutes(app: FastifyInstance): Promise<void> {
                     created_at: { type: 'string' },
                   },
                 },
-                xlm: {
+                avax: {
                   type: 'object',
                   properties: {
                     buy: { type: 'number' },

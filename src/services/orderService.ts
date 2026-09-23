@@ -11,11 +11,9 @@ import { getPayoutAddress } from './cchainPayoutAccount';
 import { getConfigNumber, getTokenConfig } from './configService';
 import type { PartnerAuthContext } from './partnerService';
 import { consumeReservation, releaseReservation, reserveForOrder, rollbackReservation } from './reservationService';
-import type { DepositRequest, WithdrawalRequest, DepositV2Request, WithdrawalV2Request, PayGateway } from '../models/types';
+import type { DepositRequest, WithdrawalRequest, PayGateway } from '../models/types';
 import type { AvaRampOrder, AvaRampPaymentInfo, AvaRampTimestamp } from '../models/avaramp';
 import { OrderState } from '../models/types';
-import * as userService from './userService';
-import * as paymentMethodService from './paymentMethodService';
 import { provisionCustodialWallet, isCChainCustodialEnabled } from './cchainWalletService';
 
 export { DepositRequest, WithdrawalRequest, OrderState } from '../models/types';
@@ -163,7 +161,7 @@ async function toApiOrder(
     }
   }
 
-  const assetCode = (order.asset_code || 'USDC').toUpperCase();
+  const assetCode = (order.asset_code || DEFAULT_ASSET_CODE).toUpperCase();
 
   const netVnd = typeof order.net_vnd === 'string' ? Number(order.net_vnd) : order.net_vnd;
 
@@ -291,7 +289,7 @@ async function transitionOrder(
 
 export async function createBuyOrder(
   usdt_amount: number,
-  asset: string = 'USDC',
+  asset: string = DEFAULT_ASSET_CODE,
   paymentCode?: string,
   options?: {
     partner?: PartnerAuthContext;
@@ -409,9 +407,6 @@ export async function listOrders(params: ListOrdersParams): Promise<OrderRow[]> 
   }
   return await query.limit(params.limit).offset(params.offset);
 }
-
-// Avalanche X-Chain uses a UTXO model: no accounts, reserves, or trustlines.
-// Recipient validation is bech32 address-format based (see isValidXAddress).
 
 export async function createDeposit(
   req: DepositRequest,
@@ -790,74 +785,3 @@ export async function bypassPayment(adminKey: string, orderId: number): Promise<
   }
 }
 
-export async function createDepositV2(
-  req: DepositV2Request,
-  options?: CreateOptions
-): Promise<AvaRampOrder> {
-  const user = await userService.findById(req.user_id);
-  if (!user) {
-    throw new Error('USER_NOT_FOUND');
-  }
-
-  const paymentMethod = await paymentMethodService.findById(req.payment_method_id);
-  if (!paymentMethod || paymentMethod.user_id !== req.user_id) {
-    throw new Error('PAYMENT_METHOD_NOT_FOUND');
-  }
-  if (paymentMethod.type !== 'CRYPTO') {
-    throw new Error('PAYMENT_METHOD_TYPE_MISMATCH');
-  }
-  if (!paymentMethod.wallet_address) {
-    throw new Error('PAYMENT_METHOD_MISSING_WALLET');
-  }
-
-  const depositReq: DepositRequest = {
-    amount: req.amount,
-    chain_id: req.chain_id,
-    token_address: req.token_address,
-    asset_code: req.asset_code,
-    recipient: paymentMethod.wallet_address,
-    callback: req.callback,
-    user_id: String(req.user_id),
-    pay_gateway: req.pay_gateway,
-  };
-
-  return createDeposit(depositReq, { ...options, userId: req.user_id });
-}
-
-export async function createWithdrawalV2(
-  req: WithdrawalV2Request,
-  options?: CreateOptions
-): Promise<AvaRampOrder> {
-  const user = await userService.findById(req.user_id);
-  if (!user) {
-    throw new Error('USER_NOT_FOUND');
-  }
-
-  const paymentMethod = await paymentMethodService.findById(req.payment_method_id);
-  if (!paymentMethod || paymentMethod.user_id !== req.user_id) {
-    throw new Error('PAYMENT_METHOD_NOT_FOUND');
-  }
-  if (paymentMethod.type !== 'BANK') {
-    throw new Error('PAYMENT_METHOD_TYPE_MISMATCH');
-  }
-  if (!paymentMethod.bank_id || !paymentMethod.bank_account || !paymentMethod.full_name) {
-    throw new Error('PAYMENT_METHOD_MISSING_BANK_INFO');
-  }
-
-  const withdrawalReq: WithdrawalRequest = {
-    amount: req.amount,
-    chain_id: req.chain_id,
-    token_address: req.token_address,
-    asset_code: req.asset_code,
-    callback: req.callback,
-    user_id: String(req.user_id),
-    payment_info: {
-      bank_id: String(paymentMethod.bank_id),
-      full_name: paymentMethod.full_name,
-      account_type: 0,
-      account_number: paymentMethod.bank_account,
-    },
-  };
-
-  return createWithdrawal(withdrawalReq, { ...options, userId: req.user_id });
-}

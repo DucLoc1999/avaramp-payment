@@ -41,11 +41,11 @@ services:
         max-file: '3'
     networks:
       - avaramp-network
-    depends_on:
-      - cchain-listener
 
   # ==========================================
   # Service 2: C-Chain Custodial Listener
+  # Optional: omit this service and set CCHAIN_LISTENER_IN_API=true on
+  # avaramp-api to run the deposit poll loop in-process (single instance only).
   # ==========================================
   cchain-listener:
     build:
