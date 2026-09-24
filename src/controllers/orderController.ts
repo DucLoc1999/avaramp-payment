@@ -11,6 +11,13 @@ import {
 import type { DepositRequest, WithdrawalRequest } from '../models/types';
 import { createErrorReply } from '../middlewares/errorHandler';
 
+/** Parse the client-supplied user id; non-numeric values are ignored. */
+function resolveUserId(userId: string | undefined): number | undefined {
+  if (userId == null || userId === '') return undefined;
+  const parsed = Number(userId);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 async function resolveOrderByParam(id: string) {
   const trimmed = id.trim();
   const numeric = Number(trimmed);
@@ -39,7 +46,10 @@ export async function handleDeposit(
     return createErrorReply(reply, 'INVALID_AMOUNT', 'Amount must be a positive number', req.id);
   }
   try {
-    const data = await createDeposit(req.body, { partner: req.partner });
+    const data = await createDeposit(req.body, {
+      partner: req.partner,
+      userId: resolveUserId(req.body.user_id),
+    });
     return reply.send({ success: true, data });
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
@@ -74,7 +84,10 @@ export async function handleWithdrawal(
     return createErrorReply(reply, 'INVALID_AMOUNT', 'Amount must be a positive number', req.id);
   }
   try {
-    const data = await createWithdrawal(req.body, { partner: req.partner });
+    const data = await createWithdrawal(req.body, {
+      partner: req.partner,
+      userId: resolveUserId(req.body.user_id),
+    });
     return reply.send({ success: true, data });
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
