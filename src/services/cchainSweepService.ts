@@ -160,10 +160,12 @@ export async function sweepUsdt(
   const spender = await masterAddress(env);
   const deadline = BigInt(Math.floor(Date.now() / 1000)) + 3600n;
 
-  // EIP-2612 Permit domain for native USDT ("USD Tether USDt" / v2).
+  // EIP-2612 Permit domain for the configured native USDT. Defaults to the
+  // Fuji Tether ("USD Tether USDt" / v2) domain; other 6-decimal USD tokens
+  // (e.g. Circle "USD Coin") can declare their domain via env.
   const domain = {
-    name: 'USD Tether USDt',
-    version: '2',
+    name: process.env.CCHAIN_USDT_PERMIT_NAME || 'USD Tether USDt',
+    version: process.env.CCHAIN_USDT_PERMIT_VERSION || '2',
     chainId: cfg.chainId,
     verifyingContract: usdt,
   };

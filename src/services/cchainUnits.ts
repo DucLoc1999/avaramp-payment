@@ -44,7 +44,7 @@ export function toUnits(amount: string, decimals: number): bigint {
   if (!/^\d+(\.\d+)?$/.test(raw)) {
     throw new Error('AMOUNT_INVALID_FORMAT');
   }
-  const fraction = raw.includes('.') ? raw.split('.')[1] : '';
+  const fraction = raw.includes('.') ? raw.split('.')[1].replace(/0+$/, '') : '';
   if (fraction.length > decimals) {
     throw new Error('AMOUNT_TOO_PRECISE');
   }

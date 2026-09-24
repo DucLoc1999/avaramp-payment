@@ -1,4 +1,5 @@
-# Local stack: AvaRamp API + C-Chain custodial listener.
+# Local stack: AvaRamp API (C-Chain deposit poll runs in-process via
+# CCHAIN_LISTENER_IN_API=true; the standalone cchain-listener worker is omitted).
 # Usage: docker compose -f docker-compose.local.yml up --build
 #
 # All services read .env.local.
@@ -16,6 +17,9 @@ services:
     restart: unless-stopped
     ports:
       - '${API_HOST_PORT:-3001}:${PORT:-3000}'
+    extra_hosts:
+      # Let the in-container API reach the host's callback listener
+      - 'host.docker.internal:host-gateway'
     env_file:
       - .env.local
     environment:
@@ -27,7 +31,7 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./data:/app/data
-      - ${GOOGLE_APPLICATION_CREDENTIALS:-/home/loc/.config/gcloud/application_default_credentials.json}:/app/gcp-creds.json:ro
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-/home/loc/.config/gcloud/avaramp-kms-signer.json}:/app/gcp-creds.json:ro
     healthcheck:
       test:
         [
@@ -40,34 +44,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    logging:
-      driver: 'json-file'
-      options:
-        max-size: '10m'
-        max-file: '3'
-    networks:
-      - avaramp-network
-
-  # ==========================================
-  # Service 2: C-Chain Custodial Listener
-  # Optional: omit this service and set CCHAIN_LISTENER_IN_API=true on
-  # avaramp-api to run the deposit poll loop in-process (single instance only).
-  # ==========================================
-  cchain-listener:
-    build:
-      context: .
-      dockerfile: Dockerfile.listener
-      target: production
-    container_name: cchain-listener-local
-    restart: unless-stopped
-    command: ["npx", "tsx", "cchain-listener/src/index.ts"]
-    env_file:
-      - .env.local
-    environment:
-      NODE_ENV: ${NODE_ENV:-development}
-    volumes:
-      - ./logs:/app/logs
-      - ./data:/app/data
     logging:
       driver: 'json-file'
       options:

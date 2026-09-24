@@ -149,7 +149,7 @@ async function refreshBalanceFromApi(token: string): Promise<string | null> {
 
 export async function initReservationService(): Promise<void> {
   const redisUrl = process.env.REDIS_URL;
-  if (!redisUrl) {
+  if (!redisUrl || process.env.RESERVATION_ENABLED === 'false') {
     enabled = false;
     ready = false;
     return;

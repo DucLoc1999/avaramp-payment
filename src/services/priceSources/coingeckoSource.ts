@@ -26,7 +26,7 @@ export async function coingeckoSource(asset: string, config: Record<string, unkn
   const cfg = config as CoinGeckoSourceConfig;
   const cacheTtl = cfg.cache_ttl_ms ?? 5_000;
   const spread = cfg.spread ?? 100;
-  const assetMap = cfg.asset_map ?? DEFAULT_ASSET_MAP;
+  const assetMap = { ...DEFAULT_ASSET_MAP, ...(cfg.asset_map ?? {}) };
   const now = Date.now();
   const cacheKey = asset.toUpperCase();
 
