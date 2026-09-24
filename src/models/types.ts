@@ -29,8 +29,6 @@ export const ProcessingState = {
   BUY_DISBURSE_FAILED: 15,
 } as const;
 
-export type PayGateway = 'bank' | 'napas';
-
 export interface DepositRequest {
   amount: string;
   chain_id: number;
@@ -39,7 +37,6 @@ export interface DepositRequest {
   recipient: string;
   callback: string;
   user_id?: string;
-  pay_gateway?: PayGateway;
 }
 
 export interface WithdrawalRequest {
@@ -55,27 +52,6 @@ export interface WithdrawalRequest {
     account_number: string;
   };
   user_id?: string;
-}
-
-export interface DepositV2Request {
-  amount: string;
-  chain_id: number;
-  token_address?: string | null;
-  asset_code: string;
-  callback: string;
-  user_id: number;
-  payment_method_id: number;
-  pay_gateway?: PayGateway;
-}
-
-export interface WithdrawalV2Request {
-  amount: string;
-  chain_id: number;
-  token_address?: string | null;
-  asset_code: string;
-  callback: string;
-  user_id: number;
-  payment_method_id: number;
 }
 
 export interface RateResult {
@@ -112,35 +88,4 @@ export interface SepayWebhookPayload {
   subAccount: string | null;
   referenceCode: string;
   description: string;
-}
-
-export interface SepayPgIpnPayload {
-  timestamp: number;
-  notification_type: 'ORDER_PAID' | 'TRANSACTION_VOID';
-  order: {
-    id: string;
-    order_id: string;
-    order_status: string;
-    order_currency: string;
-    order_amount: string;
-    order_invoice_number: string;
-    custom_data: unknown[];
-    user_agent: string;
-    ip_address: string;
-    order_description: string;
-  };
-  transaction: {
-    id: string;
-    payment_method: string;
-    transaction_id: string;
-    transaction_type: string;
-    transaction_date: string;
-    transaction_status: 'APPROVED' | 'DECLINED';
-    transaction_amount: string;
-    transaction_currency: string;
-  };
-  customer: {
-    id: string;
-    customer_id: string;
-  };
 }

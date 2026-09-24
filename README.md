@@ -44,7 +44,7 @@ Partner (Partner-App-Key)
 Buy/sell quotes built on Binance P2P median, with configurable spreads, per-token fees, minimum fees, and an audit trail for every fee change.
 
 ### 2. Bank-Payment Collection
-SePay integration for Vietnamese bank transfers (QiR) plus NAPAS card/e-wallet checkout — each order gets a unique `payment_code` embedded in the transfer description.
+SePay integration for Vietnamese bank transfers (QiR) — each order gets a unique `payment_code` embedded in the transfer description.
 
 ### 3. Resumable Disbursement
 Confirmed fiat payments are executed on the Avalanche C-Chain by the payout service; transactions are signed in-process via GCP Cloud KMS, keeping secrets outside the API process.

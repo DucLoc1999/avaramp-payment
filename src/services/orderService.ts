@@ -3,7 +3,6 @@ import { getAddress, isAddress } from 'viem';
 import db from '../db';
 import { getQuote, getMinFee } from './priceService';
 import { createSepayOrder } from './sepayPgService';
-import { createNapasCheckout, cancelOrder as cancelNapasOrder } from './sepayNapasService';
 import { fireCallback } from './callbackService';
 import { DEFAULT_NATIVE_USDT_ADDRESS } from '../config/cchain';
 import { disburseCchain } from './cchainPayoutService';
@@ -11,7 +10,7 @@ import { getPayoutAddress } from './cchainPayoutAccount';
 import { getConfigNumber, getTokenConfig } from './configService';
 import type { PartnerAuthContext } from './partnerService';
 import { consumeReservation, releaseReservation, reserveForOrder, rollbackReservation } from './reservationService';
-import type { DepositRequest, WithdrawalRequest, PayGateway } from '../models/types';
+import type { DepositRequest, WithdrawalRequest } from '../models/types';
 import type { AvaRampOrder, AvaRampPaymentInfo, AvaRampTimestamp } from '../models/avaramp';
 import { OrderState } from '../models/types';
 import { provisionCustodialWallet, isCChainCustodialEnabled } from './cchainWalletService';
@@ -97,13 +96,8 @@ interface OrderRow {
 }
 
 export interface CreateOptions {
-  clientIp?: string;
   partner?: PartnerAuthContext;
   userId?: number;
-}
-
-export interface CreateDepositParams extends DepositRequest {
-  _clientIp?: string;
 }
 
 function toTimestamp(date: Date | string | number): AvaRampTimestamp {
@@ -145,7 +139,7 @@ async function buildPartnerAdjustedQuote(
 
 async function toApiOrder(
   order: OrderRow,
-  overrides?: Partial<Pick<AvaRampOrder, 'body' | 'pay_data' | 'user_id' | 'client_ip' | 'outcome'>>
+  overrides?: Partial<Pick<AvaRampOrder, 'body' | 'pay_data' | 'user_id'>>
 ): Promise<AvaRampOrder> {
   const rate = typeof order.rate === 'string' ? Number(order.rate) : order.rate;
   const feeVnd = typeof order.fee_vnd === 'string' ? Number(order.fee_vnd) : order.fee_vnd;
@@ -184,7 +178,6 @@ async function toApiOrder(
     id: String(order.id),
     user_id: overrides?.user_id ?? '',
     order_type: order.direction,
-    external_id: null,
     code: order.payment_code,
     provider: order.direction === 'buy' ? 'sepay' : 'chain',
     callback: order.callback,
@@ -207,8 +200,6 @@ async function toApiOrder(
     expired_at: toTimestamp(expiry),
     created_at: toTimestamp(order.created_at),
     updated_at: toTimestamp(order.updated_at),
-    client_ip: overrides?.client_ip ?? '',
-    outcome: overrides?.outcome ?? '',
     net_vnd: netVnd,
     total_fee_vnd: feeVnd,
     transaction_hash: order.transaction_hash,
@@ -294,23 +285,15 @@ export async function createBuyOrder(
   options?: {
     partner?: PartnerAuthContext;
     quote?: Awaited<ReturnType<typeof buildPartnerAdjustedQuote>>;
-    pay_gateway?: PayGateway;
   },
 ) {
   const quote = options?.quote ?? await buildPartnerAdjustedQuote('buy', usdt_amount, asset, options?.partner);
   const payment_code = paymentCode || generatePaymentCode();
-  const payGateway = options?.pay_gateway ?? 'bank';
 
-  const sepayOrder = payGateway === 'napas'
-    ? await createNapasCheckout({
-        amount: quote.net_vnd,
-        description: `Thanh toan don hang ${payment_code}`,
-        invoice: payment_code,
-      })
-    : await createSepayOrder({
-        payment_code,
-        net_vnd: quote.net_vnd,
-      });
+  const sepayOrder = await createSepayOrder({
+    payment_code,
+    net_vnd: quote.net_vnd,
+  });
 
   const inserted = await db('orders').insert({
     payment_code,
@@ -327,7 +310,7 @@ export async function createBuyOrder(
     bank_short: sepayOrder.bank_info.bank_short_name,
     order_state: OrderState.CREATED,
     partner_id: options?.partner?.id ?? null,
-    pay_gateway: payGateway,
+    pay_gateway: 'bank',
   });
   const id = firstInsertedId(inserted);
 
@@ -454,7 +437,7 @@ export async function createDeposit(
 
   let result: Awaited<ReturnType<typeof createBuyOrder>>;
   try {
-    result = await createBuyOrder(usdtAmount, req.asset_code, paymentCode, { partner: options?.partner, quote, pay_gateway: req.pay_gateway ?? 'bank' });
+    result = await createBuyOrder(usdtAmount, req.asset_code, paymentCode, { partner: options?.partner, quote });
   } catch (error) {
     await rollbackReservation(paymentCode);
     throw error;
@@ -490,7 +473,6 @@ export async function createDeposit(
   const walletAddress = await resolvePayoutAddress();
   return await toApiOrder(order as OrderRow, {
     user_id: req.user_id ?? '',
-    client_ip: options?.clientIp ?? '',
     pay_data: {
       address: walletAddress,
       qr_link: result.sepayOrder.qr_code_url,
@@ -597,7 +579,6 @@ export async function createWithdrawal(
   const walletAddress = depositedAddress;
   return await toApiOrder(order as OrderRow, {
     user_id: req.user_id ?? '',
-    client_ip: options?.clientIp ?? '',
     pay_data: { address: walletAddress },
     body: {
       bankInfo: {
@@ -669,15 +650,6 @@ async function performCancel(order: OrderRow, reason?: string): Promise<CancelRe
   // Block cancellation if payment webhook already received
   if (order.last_webhook_id) {
     return { error: 'CANCEL_NOT_ALLOWED' };
-  }
-
-  // Cancel the SePay PG checkout first for NAPAS orders; never block on it
-  if (order.pay_gateway === 'napas') {
-    try {
-      await cancelNapasOrder(order.payment_code);
-    } catch (err) {
-      console.error(`[OrderService] SePay pgapi cancel failed for ${order.payment_code}:`, err);
-    }
   }
 
   const updated = await transitionOrder(order.id, {

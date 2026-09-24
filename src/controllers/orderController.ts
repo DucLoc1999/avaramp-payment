@@ -39,7 +39,7 @@ export async function handleDeposit(
     return createErrorReply(reply, 'INVALID_AMOUNT', 'Amount must be a positive number', req.id);
   }
   try {
-    const data = await createDeposit(req.body, { clientIp: req.ip, partner: req.partner });
+    const data = await createDeposit(req.body, { partner: req.partner });
     return reply.send({ success: true, data });
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
@@ -74,7 +74,7 @@ export async function handleWithdrawal(
     return createErrorReply(reply, 'INVALID_AMOUNT', 'Amount must be a positive number', req.id);
   }
   try {
-    const data = await createWithdrawal(req.body, { clientIp: req.ip, partner: req.partner });
+    const data = await createWithdrawal(req.body, { partner: req.partner });
     return reply.send({ success: true, data });
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
@@ -165,35 +165,5 @@ export async function handleCancel(
   }
 
   return reply.send({ success: true, data: result.data });
-}
-
-export async function handleOrderSuccess(
-  req: FastifyRequest<{ Params: { id: string } }>,
-  reply: FastifyReply,
-): Promise<void> {
-  const order = await resolveOrderByParam(req.params.id);
-  const paymentCode = order?.payment_code || req.params.id;
-  const url = `${process.env.DOMAIN || ''}/order/${paymentCode}?payment=success`;
-  return reply.redirect(url, 302);
-}
-
-export async function handleOrderError(
-  req: FastifyRequest<{ Params: { id: string } }>,
-  reply: FastifyReply,
-): Promise<void> {
-  const order = await resolveOrderByParam(req.params.id);
-  const paymentCode = order?.payment_code || req.params.id;
-  const url = `${process.env.DOMAIN || ''}/order/${paymentCode}?payment=error`;
-  return reply.redirect(url, 302);
-}
-
-export async function handleOrderCancel(
-  req: FastifyRequest<{ Params: { id: string } }>,
-  reply: FastifyReply,
-): Promise<void> {
-  const order = await resolveOrderByParam(req.params.id);
-  const paymentCode = order?.payment_code || req.params.id;
-  const url = `${process.env.DOMAIN || ''}/order/${paymentCode}?payment=cancel`;
-  return reply.redirect(url, 302);
 }
 

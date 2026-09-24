@@ -3,7 +3,7 @@ import {
   type DepositRequest,
   type WithdrawalRequest,
 } from '../services/orderService';
-import { handleDeposit, handleWithdrawal, handleListOrders, handleGetOrder, handleCancel, handleOrderSuccess, handleOrderError, handleOrderCancel } from '../controllers/orderController';
+import { handleDeposit, handleWithdrawal, handleListOrders, handleGetOrder, handleCancel } from '../controllers/orderController';
 import { partnerAuth } from '../middlewares/partnerAuth';
 
 export async function orderRoutes(app: FastifyInstance): Promise<void> {
@@ -25,7 +25,6 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
           recipient: { type: 'string', description: "User's Avalanche C-Chain (EVM) 0x wallet address to receive the payout." },
           callback: { type: 'string', description: 'HTTPS webhook URL. Called on every order state change with HMAC signature.' },
           user_id: { type: 'string', description: 'Optional client-side user ID for tracking.' },
-          pay_gateway: { type: 'string', enum: ['bank', 'napas'], default: 'bank', description: 'Payment gateway: bank (static SePay QR, default) or napas (SePay PG NAPAS checkout with VietQR).' },
         },
       },
       response: {
@@ -272,47 +271,4 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
       },
     },
   }, handleCancel);
-
-  app.get<{ Params: { id: string } }>('/:id/success', {
-    schema: {
-      tags: ['Orders'],
-      summary: 'Order success redirect',
-      description: 'Redirects to frontend order status page with payment=success query param. Accepts order ID or payment code.',
-      params: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', description: 'Order ID or payment code' },
-        },
-      },
-      response: { 302: { type: 'null', description: 'Redirect to ${DOMAIN}/order/{code}?payment=success' } },
-    },
-  }, handleOrderSuccess);
-  app.get<{ Params: { id: string } }>('/:id/error', {
-    schema: {
-      tags: ['Orders'],
-      summary: 'Order error redirect',
-      description: 'Redirects to frontend order status page with payment=error query param. Accepts order ID or payment code.',
-      params: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', description: 'Order ID or payment code' },
-        },
-      },
-      response: { 302: { type: 'null', description: 'Redirect to ${DOMAIN}/order/{code}?payment=error' } },
-    },
-  }, handleOrderError);
-  app.get<{ Params: { id: string } }>('/:id/cancel', {
-    schema: {
-      tags: ['Orders'],
-      summary: 'Order cancel redirect',
-      description: 'Redirects to frontend order status page with payment=cancel query param. Accepts order ID or payment code.',
-      params: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', description: 'Order ID or payment code' },
-        },
-      },
-      response: { 302: { type: 'null', description: 'Redirect to ${DOMAIN}/order/{code}?payment=cancel' } },
-    },
-  }, handleOrderCancel);
 }

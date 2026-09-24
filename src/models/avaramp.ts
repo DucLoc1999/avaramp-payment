@@ -52,7 +52,6 @@ export interface AvaRampOrder {
   id: string;
   user_id: string;
   order_type: 'buy' | 'sell';
-  external_id: string | null;
   code: string;
   provider: string;
   callback: string;
@@ -73,8 +72,6 @@ export interface AvaRampOrder {
   expired_at: AvaRampTimestamp;
   created_at: AvaRampTimestamp;
   updated_at: AvaRampTimestamp;
-  client_ip: string;
-  outcome: string;
   net_vnd: number;
   total_fee_vnd: number;
   transaction_hash?: string | null;

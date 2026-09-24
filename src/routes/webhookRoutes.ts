@@ -1,9 +1,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { sepayAuth } from '../middlewares/sepayAuth';
 import { cchainAuth } from '../middlewares/cchainAuth';
-import { sepayPgIpnAuth } from '../middlewares/sepayPgIpnAuth';
-import type { SepayWebhookPayload, SepayPgIpnPayload } from '../models/types';
-import { handleSepayWebhook, handleSepayPgIpn } from '../controllers/webhookController';
+import type { SepayWebhookPayload } from '../models/types';
+import { handleSepayWebhook } from '../controllers/webhookController';
 import { handleCchainIncoming } from '../controllers/webhookController';
 
 export async function webhookRoutes(app: FastifyInstance): Promise<void> {
@@ -62,63 +61,6 @@ export async function webhookRoutes(app: FastifyInstance): Promise<void> {
       },
     },
   }, handleCchainIncoming);
-
-  app.post<{ Body: SepayPgIpnPayload }>('/sepay-ipn', {
-    preHandler: sepayPgIpnAuth,
-    schema: {
-      tags: ['Webhooks'],
-      summary: 'SePay Payment Gateway IPN — receives card/e-wallet payment notifications',
-      body: {
-        type: 'object',
-        required: ['timestamp', 'notification_type', 'order', 'transaction'],
-        properties: {
-          timestamp: { type: 'integer' },
-          notification_type: { type: 'string', enum: ['ORDER_PAID', 'TRANSACTION_VOID'] },
-          order: {
-            type: 'object',
-            required: ['order_invoice_number'],
-            properties: {
-              id: { type: 'string' },
-              order_id: { type: 'string' },
-              order_status: { type: 'string' },
-              order_currency: { type: 'string' },
-              order_amount: { type: 'string' },
-              order_invoice_number: { type: 'string', description: 'Maps to payment_code (DH...)' },
-              custom_data: { type: 'array' },
-              user_agent: { type: 'string' },
-              ip_address: { type: 'string' },
-              order_description: { type: 'string' },
-            },
-          },
-          transaction: {
-            type: 'object',
-            required: ['transaction_id', 'transaction_status', 'transaction_amount'],
-            properties: {
-              id: { type: 'string' },
-              payment_method: { type: 'string' },
-              transaction_id: { type: 'string' },
-              transaction_type: { type: 'string' },
-              transaction_date: { type: 'string' },
-              transaction_status: { type: 'string', enum: ['APPROVED', 'DECLINED'] },
-              transaction_amount: { type: 'string' },
-              transaction_currency: { type: 'string' },
-            },
-          },
-          customer: {
-            anyOf: [
-              { type: 'object', properties: { id: { type: 'string' }, customer_id: { type: 'string' } } },
-              { type: 'null' },
-            ],
-          },
-        },
-      },
-      response: {
-        200: { type: 'object', properties: { success: { type: 'boolean' } } },
-        400: { type: 'object', properties: { success: { type: 'boolean' }, error: { type: 'string' } } },
-        401: { type: 'object', properties: { success: { type: 'boolean' }, error: { type: 'string' } } },
-      },
-    },
-  }, (req, reply) => handleSepayPgIpn(req, reply, app));
 }
 
 interface CchainIncomingBody {

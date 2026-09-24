@@ -24,12 +24,8 @@ import { ensureBootstrapPartner } from './services/partnerService';
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: true });
 
-  const allowedOrigins = process.env.FRONTEND_ORIGIN
-    ? [process.env.FRONTEND_ORIGIN]
-    : ([] as string[]);
-
   await app.register(cors, {
-    origin: allowedOrigins.length > 0 ? allowedOrigins : true,
+    origin: false,
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'partner-app-key'],
     credentials: true,
