@@ -8,7 +8,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Web**: Fastify 4
 - **DB**: PostgreSQL via Knex 3 (`pg` driver)
 - **Payments**: `sepay-pg-node` (SePay sandbox/prod PG integration)
-- **Queue**: kafkajs (Kafka)
 - **Blockchain**: `viem` (Avalanche C-Chain EVM)
 - **Signing**: `@google-cloud/kms` — C-Chain payout tx signing via GCP Cloud KMS secp256k1 (ADC auth).
 
@@ -198,7 +197,6 @@ All errors return standardized format with `X-Trace-ID` header:
 - `priceService.ts` — quote calculation with spreads/fees
 - `sepayPgService.ts` — SePay checkout session
 - `orderService.ts` — deposit/withdrawal creation, confirmPayment, cancelOrder, formatOrderResponse
-- `queueService.ts` — Kafka producer: emitDisburseCrypto, emitOrderPaid
 - `gcpKmsService.ts` — GCP Cloud KMS secp256k1 signing: signTxHash (32-byte digest → r‖s‖v), getKmsPublicKeyCompressed (used by the C-Chain payout account)
 - `encryptionService.ts` — AES-256-GCM encrypt/decrypt for wallet secrets
 - `callbackService.ts` — webhook callback with retry (3×), logging, HMAC signature, dual-secret rotation
@@ -208,8 +206,8 @@ All errors return standardized format with `X-Trace-ID` header:
 - `cchainListenerService.ts` — poll custodial addresses for native AVAX + USDT `Transfer` deposits, dedupe, confirmations
 - `cchainSweepService.ts` — sweep USDT (EIP-712 Permit + `transferFrom`) and native AVAX (self-funded transfer); EIP-1559 overrides
 - `cchainOrderService.ts` — correlate swept deposits to sell orders and complete them idempotently
-- `cchainEmitService.ts` — emit confirmed C-Chain deposits to Kafka/HTTP fallback and in-process handler
-- `cchainPayoutService.ts` — C-Chain buy payout: EIP-1559 native AVAX / ERC-20 USDT transfers to the recipient `0x` address, balance preflight, confirmations, idempotency, failure marking, stuck-order recovery (`initCchainPayout`, `sweepStuckCchainPayouts`)
+- `cchainEmitService.ts` — deliver confirmed C-Chain deposits to the HTTP endpoint and the in-process handler
+- `cchainPayoutService.ts` — C-Chain buy payout: EIP-1559 native AVAX / ERC-20 USDT transfers to the recipient `0x` address, balance preflight, confirmations, idempotency, failure marking, stuck-order recovery (`initCchainPayout`, `sweepStuckCchainPayouts`, `startCchainPayoutReconciler`)
 - `cchainPayoutAccount.ts` — payout signer: viem account backed by GCP KMS secp256k1 (raw-key `CCHAIN_PAYOUT_WALLET_PRIVATE_KEY` fallback); derives the payout `0x` address
 - `cchainUnits.ts` — token-aware decimal conversion (AVAX 18, USDT 6) with precision validation
 
@@ -252,15 +250,6 @@ All via `import 'dotenv/config'`. See `.env.example`:
 | `CALLBACK_SIGNATURE_SECRET` | HMAC secret for callback signing |
 | `ORDER_EXPIRY_MINUTES` | Order expiration time in minutes (default: 5) |
 | `CHAIN_WEBHOOK_SECRET` | HMAC secret for chain webhook |
-| `KAFKA_BROKERS` | Kafka address:port |
-| `KAFKA_CLIENT_ID` | Kafka client ID (default: avaramp) |
-| `KAFKA_DISBURSE_TOPIC` | Default: avaramp.disburse_crypto |
-| `KAFKA_ORDER_PAID_TOPIC` | Default: avaramp.order_paid |
-| `KAFKA_SSL_CA_PATH` | Path to CA cert for TLS verification (e.g. `/app/data/kafka_ca.pem`). Required for managed brokers (Aiven) |
-| `KAFKA_SSL` | Set `true` to enable TLS without a custom CA (ignored if `KAFKA_SSL_CA_PATH` set) |
-| `KAFKA_SASL_MECHANISM` | `plain` / `scram-sha-256` / `scram-sha-512` (default: scram-sha-256) |
-| `KAFKA_SASL_USERNAME` | SASL username (e.g. avnadmin) |
-| `KAFKA_SASL_PASSWORD` | SASL password |
 | `GCP_KMS_PROJECT_ID` | GCP project id (e.g. graceful-envoy-463407-a1) |
 | `GCP_KMS_LOCATION_ID` | KMS location (e.g. asia-southeast1) |
 | `GCP_KMS_KEY_RING` | KMS key ring (e.g. avax-ramp) |
@@ -281,7 +270,13 @@ waits for `CCHAIN_PAYOUT_CONFIRMATIONS`, then marks the order `COMPLETED` (hash
 stored) or `FAILED`. Signing uses GCP KMS secp256k1 via a viem account; a raw
 `CCHAIN_PAYOUT_WALLET_PRIVATE_KEY` is the dev fallback. Buy recipients MUST be
 EVM `0x` addresses. `sweepStuckCchainPayouts()` recovers orders left in
-`processing_state = 13` after a restart. The X-Chain settlement path has been
+`processing_state = 13` — it runs once at boot and then every
+`CCHAIN_PAYOUT_RECONCILE_INTERVAL_MS` via `startCchainPayoutReconciler()`,
+skipping orders touched within `CCHAIN_PAYOUT_RECONCILE_MIN_AGE_MS` so the sweep
+cannot race a payout still gathering confirmations. A payout is only marked
+final from the confirmation depth of the receipt already held, never from a
+fresh `eth_getTransactionByHash`, which a lagging RPC node can answer with a
+null block number and would strand the order. The X-Chain settlement path has been
 retired; the C-Chain is the only settlement chain.
 
 ## C-Chain custodial sell flow (Avalanche EVM)
@@ -306,6 +301,31 @@ Correlation: a confirmed, swept deposit maps by `orders.recipient = deposit addr
 worker (PM2/compose) polls the C-Chain, or the API does when
 `CCHAIN_LISTENER_IN_API=true` (`services/cchainListenerLoop.ts`).
 
+**Listener invariants** (violating these wedges the poll loop and strands user
+funds — see `reconcileSellDepositBalances` for the full rationale):
+
+- Only custodial wallets of **open** orders (`CREATED`/`PROCESSING`) get a
+  `eth_getLogs` scan. `listOpenCustodialWallets` joins `orders`; closed orders
+  must never re-enter the poll set, or the wallet list grows without bound and
+  the oldest cancelled order blocks the queue forever.
+- Every log range is chunked to `CCHAIN_LOG_SCAN_CHUNK_BLOCKS` and the cursor is
+  persisted **after each chunk**, so an outage can never grow an unanswerable
+  `cursor → head` range. A cursor staler than `CCHAIN_LOG_SCAN_MAX_SPAN_BLOCKS`
+  is clamped with a warning; the skipped gap is recovered by reconciliation.
+- Failures are isolated per address **and** per stage (`runStage` in
+  `cchainListenerLoop`). A single timed-out `eth_getLogs` must never skip the
+  native scan, reconciliation, or the **sweep** stage — sweeps are what move
+  user funds.
+- `abandoned` is terminal: it marks a deposit that exhausted `CCHAIN_SWEEP_MAX_ATTEMPTS`
+  or was handed to a human. Re-detecting it would restart the sweep cycle every
+  poll, so the reconciler treats it as an existing deposit.
+- `listSweepableDeposits` honours `next_sweep_attempt_at`; without it the
+  exponential backoff in `cchainOrderService` is defeated and a `failed` deposit
+  is re-emitted every poll.
+- A closed order's address is still **balance-checked** for
+  `CCHAIN_CLOSED_WALLET_WATCH_MS`, so a deposit that lands after expiry is
+  noticed and can be swept or refunded.
+
 C-Chain env (see `.env.example`):
 
 | Variable | Description |
@@ -318,11 +338,16 @@ C-Chain env (see `.env.example`):
 | `CCHAIN_MIN_SWEEP_THRESHOLD` | Min native unit before sweeping (default 0) |
 | `MASTER_WALLET_PRIVATE_KEY` | Master/sweep-destination wallet private key (0x hex) |
 | `CUSTODIAL_KEY_ENCRYPTION_KEY` | ≥32-char AES-256-GCM key for custodial keys at rest |
-| `CCHAIN_LISTENER_FALLBACK_URL` | HTTP fallback (e.g. `/api/webhooks/cchain-incoming`) |
-| `CCHAIN_LISTENER_FALLBACK_AUTH_TOKEN` | Bearer token for the fallback webhook |
+| `CCHAIN_LISTENER_FALLBACK_URL` | HTTP delivery endpoint for confirmed deposits (e.g. `/api/webhooks/cchain-incoming`) |
+| `CCHAIN_LISTENER_FALLBACK_AUTH_TOKEN` | Bearer token for that webhook — **ASCII only**. The value is written verbatim into an HTTP header, so a non-ASCII placeholder (e.g. an em-dash) makes it unsendable. Inline `#` comments on the assignment are fine: dotenv strips them from unquoted values |
 | `CCHAIN_LISTENER_IN_API` | Run the deposit poll loop inside the API process instead of the `cchain-listener` worker (default: false; enable in exactly one process) |
+| `CCHAIN_LOG_SCAN_CHUNK_BLOCKS` | Max blocks per `eth_getLogs` call (default: 2000) |
+| `CCHAIN_LOG_SCAN_MAX_SPAN_BLOCKS` | Max blocks scanned per address per poll (default: 20000; must be ≥ chunk) |
+| `CCHAIN_CLOSED_WALLET_WATCH_MS` | How long a closed order's custodial address is still balance-checked for late deposits (default: 7 days) |
 | `CCHAIN_PAYOUT_WALLET_PRIVATE_KEY` | Payout wallet key (0x hex) — dev/local fallback; prefers GCP KMS |
 | `CCHAIN_PAYOUT_CONFIRMATIONS` | Blocks before a buy payout is final (default: 1) |
+| `CCHAIN_PAYOUT_RECONCILE_INTERVAL_MS` | How often to sweep buy payouts stuck in `processing_state = 13` (default: 60000) |
+| `CCHAIN_PAYOUT_RECONCILE_MIN_AGE_MS` | Only reconcile orders untouched for this long, so the sweep never races a payout still gathering confirmations (default: 120000) |
 | `CCHAIN_AVAX_GAS_RESERVE_WEI` | AVAX (wei) kept for USDT payout gas (default: 0.01 AVAX) |
 
 > Secret rotation: on rotation of `MASTER_WALLET_PRIVATE_KEY`, sweep new deposits to

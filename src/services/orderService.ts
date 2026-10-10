@@ -14,6 +14,7 @@ import type { DepositRequest, WithdrawalRequest } from '../models/types';
 import type { AvaRampOrder, AvaRampPaymentInfo, AvaRampTimestamp } from '../models/avaramp';
 import { OrderState } from '../models/types';
 import { provisionCustodialWallet, isCChainCustodialEnabled } from './cchainWalletService';
+import { isNoPayoutPartnerName } from './partnerPolicy';
 
 export { DepositRequest, WithdrawalRequest, OrderState } from '../models/types';
 
@@ -22,13 +23,6 @@ const DEFAULT_ASSET_CODE = 'AVAX';
 
 /** Order expiry duration in milliseconds. Defaults to 5 minutes. */
 export const ORDER_EXPIRY_MS = (Number(process.env.ORDER_EXPIRY_MINUTES) || 5) * 60 * 1000;
-
-/** Partner name whose withdrawals skip VND payout and VND liquidity reservation. */
-const NO_PAYOUT_PARTNER_NAME = 'tx-bot';
-
-function isNoPayoutPartnerName(name: string | undefined | null): boolean {
-  return name === NO_PAYOUT_PARTNER_NAME;
-}
 
 function isSupportedToken(tokenAddress: string | null | undefined, assetCode: string): boolean {
   const code = (assetCode || '').trim().toUpperCase();
@@ -747,7 +741,7 @@ export async function bypassPayment(adminKey: string, orderId: number): Promise<
   // Consume reservation
   await consumeReservation(order.payment_code);
 
-  // Execute the C-Chain payout directly (not via Kafka) for an immediate result.
+  // Execute the C-Chain payout directly for an immediate result.
   const disburseResult = await disburseCchain(orderId, order.recipient, usdtAmount, assetCode, tokenAddress);
 
   if (disburseResult.success) {

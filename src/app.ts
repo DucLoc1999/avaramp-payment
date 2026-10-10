@@ -75,7 +75,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       const { getPayoutAddress } = await import('./services/cchainPayoutAccount');
       try {
         const payoutWallet = await getPayoutAddress();
-        logger.info({ payoutWallet }, 'Active C-Chain payout wallet (from KMS payout key config)');
+        logger.info({ payoutWallet }, 'Active C-Chain payout wallet');
       } catch (error) {
         logger.warn({ error: error instanceof Error ? error.message : String(error) }, 'Could not resolve C-Chain payout wallet from GCP KMS');
       }

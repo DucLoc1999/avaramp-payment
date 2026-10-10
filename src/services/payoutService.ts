@@ -15,6 +15,12 @@ export interface PayoutRequest {
   bankAccountName: string;
   bankAccountNo: string;
   description?: string;
+  /**
+   * Stable idempotency key handed to PayOS. Callers MUST pass a value that is
+   * constant across retries (e.g. `payout_<orderId>`); the default below is
+   * stable per order, but a timestamped value would let a retry pay twice.
+   */
+  referenceId?: string;
 }
 
 export interface PayoutResult {
@@ -97,9 +103,10 @@ export async function executePayout(req: PayoutRequest, forceStub = false): Prom
   const payOS = getPayOS();
   try {
     const bin = getBinById(Number(req.bankId)) || req.bankId;
-    console.log(`[PayoutService] PAYOS payout: bin=${bin}, account=${req.bankAccountNo}, amount=${req.amount} VND`);
+    const referenceId = req.referenceId ?? `payout_${req.orderId}`;
+    console.log(`[PayoutService] PAYOS payout: bin=${bin}, account=${req.bankAccountNo}, amount=${req.amount} VND, ref=${referenceId}`);
     const payout = await payOS.payouts.create({
-      referenceId: `payout_${req.orderId}_${Date.now()}`,
+      referenceId,
       amount: req.amount,
       description: req.description || `Withdrawal ${req.orderId}`,
       toBin: bin,

@@ -42,7 +42,7 @@ export async function webhookRoutes(app: FastifyInstance): Promise<void> {
     preHandler: cchainAuth,
     schema: {
       tags: ['Webhooks'],
-      summary: 'C-Chain incoming webhook — fallback when Kafka unavailable (custodial sweep)',
+      summary: 'C-Chain incoming webhook — out-of-process deposit delivery (custodial sweep)',
       body: {
         type: 'object',
         required: ['address', 'asset', 'amount'],

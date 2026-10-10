@@ -61,3 +61,4 @@ test/
 
 # scratch
 p2p_prices.db
+tmp_ops/

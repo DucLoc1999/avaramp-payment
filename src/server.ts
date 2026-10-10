@@ -2,9 +2,9 @@ import 'dotenv/config';
 import { buildApp } from './app';
 import { logger } from './config/logger';
 import { appConfig } from './config/app';
-import { initCchainPayout, sweepStuckCchainPayouts } from './services/cchainPayoutService';
+import { initCchainPayout, sweepStuckCchainPayouts, startCchainPayoutReconciler } from './services/cchainPayoutService';
+import { startSellPayoutReconciler } from './services/sellPayoutService';
 import { startCchainListenerLoop, stopCchainListenerLoop } from './services/cchainListenerLoop';
-import { initKafka, disconnectKafka } from './services/queueService';
 import { startSnapshotScheduler } from './services/snapshotLandingPageScheduler';
 import { startOrderExpiryScheduler } from './services/orderExpiryScheduler';
 import { refresh as refreshConfig } from './services/configService';
@@ -15,6 +15,8 @@ import db from './db';
 let app: ReturnType<typeof buildApp> extends Promise<infer T> ? T : never;
 let snapshotInterval: NodeJS.Timeout | undefined;
 let expiryInterval: NodeJS.Timeout | undefined;
+let payoutReconcileInterval: NodeJS.Timeout | undefined;
+let sellPayoutReconcileInterval: NodeJS.Timeout | null = null;
 let reservationIntervals: NodeJS.Timeout[] = [];
 
 async function healthCheck() {
@@ -26,17 +28,13 @@ async function healthCheck() {
   }
 }
 
-async function checkKafkaConnection() {
-  await initKafka();
-}
-
-
 async function gracefulShutdown(signal: string) {
   logger.info(`Received ${signal}, shutting down gracefully...`);
   try {
-    await disconnectKafka();
     if (snapshotInterval) clearInterval(snapshotInterval);
     if (expiryInterval) clearInterval(expiryInterval);
+      if (payoutReconcileInterval) clearInterval(payoutReconcileInterval);
+      if (sellPayoutReconcileInterval) clearInterval(sellPayoutReconcileInterval);
     for (const interval of reservationIntervals) clearInterval(interval);
     await shutdownReservationService();
     stopCchainListenerLoop();
@@ -58,7 +56,6 @@ async function start() {
   await runMigrations();
   await refreshConfig();
   await healthCheck();
-  await checkKafkaConnection();
   await initReservationService();
 
   // Buy payouts settle on the C-Chain; resolve the payout wallet and verify the
@@ -101,7 +98,9 @@ async function start() {
   await app.listen({ port, host });
   snapshotInterval = startSnapshotScheduler();
   expiryInterval = startOrderExpiryScheduler();
-  reservationIntervals = startReservationSchedulers();
+    payoutReconcileInterval = startCchainPayoutReconciler();
+    sellPayoutReconcileInterval = startSellPayoutReconciler();
+    reservationIntervals = startReservationSchedulers();
 }
 
 start();

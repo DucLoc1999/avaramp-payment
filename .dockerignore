@@ -1,8 +1,11 @@
 node_modules
 dist
 .env
+.env.*
 .dev.vars
 .git
 *.md
 logs
 data
+tmp_ops
+coverage

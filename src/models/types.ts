@@ -21,12 +21,20 @@ export const OrderState = {
 } as const;
 
 export const ProcessingState = {
+  // Sell (withdrawal): user sends crypto, we pay VND out.
   SELL_CREATED: 10,
   SELL_PAYMENT_RECEIVED: 12,
-  SELL_PAYOUT_COMPLETED: 13,
-  SELL_PAYOUT_FAILED: 14,
-  BUY_DISBURSE_COMPLETED: 14,
-  BUY_DISBURSE_FAILED: 15,
+  // 20+ is reserved for sell so it can never collide with the buy payout states
+  // below. 13/14/15 were previously shared between buy and sell, which let the
+  // buy reconciler match a sell order in `PROCESSING`.
+  SELL_SWEPT_AWAITING_PAYOUT: 20,
+  SELL_PAYOUT_COMPLETED: 21,
+  SELL_PAYOUT_FAILED: 22,
+  SELL_NO_PAYOUT: 23,
+  // Buy (deposit): user pays VND, we send crypto out.
+  BUY_PAYOUT_IN_FLIGHT: 13,
+  BUY_PAYOUT_COMPLETED: 14,
+  BUY_PAYOUT_FAILED: 15,
 } as const;
 
 export interface DepositRequest {

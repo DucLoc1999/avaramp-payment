@@ -4,6 +4,7 @@ import { getAddress } from 'viem';
 import db from '../db';
 import { encryptPrivateKey, decryptPrivateKey, EncryptedPayload } from './custodialCipherService';
 import { getBlockNumber } from './cchainRpcService';
+import { OrderState } from '../models/types';
 
 /**
  * The C-Chain custodial sell/deposit flow is enabled when the C-Chain RPC and
@@ -119,9 +120,45 @@ function getPrivateKeyFromRow(row: CustodialWalletRow | undefined, env: NodeJS.P
   }
 }
 
-/** All active custodial deposit addresses. */
-export async function listActiveCustodialAddresses(): Promise<CustodialWalletRow[]> {
-  return db('custodial_wallets').orderBy('created_at', 'asc');
+/**
+ * Order states in which a custodial deposit address can still legitimately
+ * receive funds. Anything terminal (completed / failed / cancelled) is retired
+ * from the listener's poll set.
+ */
+const OPEN_ORDER_STATES: number[] = [OrderState.CREATED, OrderState.PROCESSING];
+
+/**
+ * Custodial wallets whose owning order is still open — i.e. the addresses the
+ * listener must poll for incoming deposits.
+ *
+ * This MUST stay filtered on the owning order's state. Returning every row
+ * (as this function used to) meant a cancelled sell order's address was polled
+ * forever, so the wallet list only ever grew and the oldest cancelled order
+ * wedged the whole listener.
+ */
+export async function listOpenCustodialWallets(): Promise<CustodialWalletRow[]> {
+  return db('custodial_wallets')
+    .join('orders', 'orders.id', 'custodial_wallets.order_id')
+    .whereIn('orders.order_state', OPEN_ORDER_STATES)
+    .select('custodial_wallets.*')
+    .orderBy('custodial_wallets.created_at', 'asc');
+}
+
+/**
+ * Custodial wallets whose owning order reached a terminal state within
+ * `watchMs`. These get a cheap balance check (not a log scan) so a deposit that
+ * lands shortly after expiry/cancellation is still noticed and can be swept or
+ * refunded, without pinning a log cursor open indefinitely.
+ */
+export async function listRetiredCustodialWallets(
+  watchMs: number
+): Promise<CustodialWalletRow[]> {
+  return db('custodial_wallets')
+    .join('orders', 'orders.id', 'custodial_wallets.order_id')
+    .whereNotIn('orders.order_state', OPEN_ORDER_STATES)
+    .where('orders.updated_at', '>=', new Date(Date.now() - watchMs))
+    .select('custodial_wallets.*')
+    .orderBy('custodial_wallets.created_at', 'asc');
 }
 
 export async function updateSweptState(

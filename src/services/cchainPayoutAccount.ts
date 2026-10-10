@@ -29,14 +29,19 @@ async function signTransactionWithKms(transaction: TransactionSerializable): Pro
 }
 
 /**
- * Resolve the C-Chain payout account. Prefers a raw private key from
- * `CCHAIN_PAYOUT_WALLET_PRIVATE_KEY` (dev/local); otherwise signs with the GCP
- * KMS secp256k1 key so private keys never leave KMS.
+ * Resolve the C-Chain payout account. Precedence:
+ *  1. `CCHAIN_PAYOUT_WALLET_PRIVATE_KEY` — explicit payout key.
+ *  2. `MASTER_WALLET_PRIVATE_KEY` when `CCHAIN_PAYOUT_USE_MASTER_WALLET=true` —
+ *     the "one wallet" deployment where sell sweeps and buy payouts share a key.
+ *  3. The GCP KMS secp256k1 key (legacy).
  */
 export async function getPayoutAccount(env: NodeJS.ProcessEnv = process.env): Promise<Account> {
   const cfg = loadCchainConfig(env);
   if (cfg.payoutWalletPrivateKey) {
     return privateKeyToAccount(cfg.payoutWalletPrivateKey as `0x${string}`);
+  }
+  if (cfg.payoutUseMasterWallet && cfg.masterWalletPrivateKey) {
+    return privateKeyToAccount(cfg.masterWalletPrivateKey as `0x${string}`);
   }
   const compressed = await getKmsPublicKeyCompressed();
   const address = publicKeyToAddress(decompressSecp256k1PublicKey(compressed));

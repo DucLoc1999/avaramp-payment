@@ -10,7 +10,7 @@ Financial integrations live or die on **trust, traceability, and uptime**. So `A
 
 1. **Secure by architecture** — hot-wallet secrets never sit in the API process; C-Chain payout transactions are signed in-process via GCP Cloud KMS secp256k1 (ADC-backed), so private keys never touch the application.
 2. **Predictable by design** — every state change is observable, audited, and delivered to you through signed webhooks.
-3. **Resilient by default** — a durable Kafka pipeline absorbs failures and retries until settlement succeeds.
+3. **Resilient by default** — a startup + periodic reconciler re-drives any payout or sweep that was interrupted, so settlement always converges.
 
 ## 🧱 Architecture
 
@@ -20,7 +20,7 @@ Financial integrations live or die on **trust, traceability, and uptime**. So `A
 Partner (Partner-App-Key)
         │ deposit / withdrawal orders
         ▼
-   Fastify API ──► Services ──► PostgreSQL / Kafka
+   Fastify API ──► Services ──► PostgreSQL
                                         │
                                         ▼
                           C-Chain payout (native AVAX / ERC-20 USDT)
@@ -33,7 +33,7 @@ Partner (Partner-App-Key)
 | Component | Role |
 |---|---|
 | **Fastify API** | Order lifecycle, quoting, webhook handling, admin |
-| **PostgreSQL / Kafka** | Durability for orders and event streams |
+| **PostgreSQL** | Durability for orders and event streams |
 | **C-Chain payout** | Sends buy-order AVAX/USDT to the recipient `0x` address via EIP-1559 txs |
 | **GCP Cloud KMS** | Signs C-Chain payout txs in-process (secp256k1); private keys never touch the app |
 | **C-Chain Listener** | Polls per-sell-order custodial `0x` wallets on Avalanche C-Chain for native AVAX + native USDT deposits and drives the sweep pipeline |
@@ -63,7 +63,6 @@ Operate config, secret rotation, statistics, and partners through admin routes �
 
 - **Node.js** 22+
 - **PostgreSQL**
-- **Kafka** (for the disbursement pipeline)
 
 ### Installation
 
@@ -72,7 +71,7 @@ npm install
 cp .env.example .env
 ```
 
-Fill in the required credentials (SePay, DB, Kafka, C-Chain, callback secret) inside `.env`.
+Fill in the required credentials (SePay, DB, C-Chain, callback secret) inside `.env`.
 
 Payout signing is done in-process via GCP Cloud KMS secp256k1 (ADC auth; requires `GCP_KMS_*` vars) or the dev-only `CCHAIN_PAYOUT_WALLET_PRIVATE_KEY` fallback. Set `CCHAIN_PAYOUT_ENABLED=true` to route buy payouts through the C-Chain payout service.
 
@@ -215,7 +214,7 @@ docker compose up -d --build
 ```
 
 - `avaramp-api` — Fastify API (healthchecked at `/health`)
-- `cchain-listener` — C-Chain deposit monitor (Kafka or HTTP fallback). Can be
+- `cchain-listener` — C-Chain deposit monitor. Can be
   folded into `avaramp-api` by setting `CCHAIN_LISTENER_IN_API=true` on the API
   and dropping this service (single-instance only).
 

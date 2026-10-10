@@ -13,10 +13,22 @@ export interface CchainConfig {
   listenerFallbackAuthToken: string;
   /** Raw private key for the C-Chain payout wallet (dev/local fallback). */
   payoutWalletPrivateKey: string;
+  /**
+   * When true and no explicit payout key is set, the Master Wallet key also signs
+   * buy payouts ("one wallet" deployment). Off by default so KMS is not shadowed
+   * silently.
+   */
+  payoutUseMasterWallet: boolean;
   /** Blocks to wait before treating a buy payout as final. */
   payoutConfirmations: number;
   /** AVAX (wei) that must remain available to pay gas for USDT payouts. */
   avaxGasReserveWei: bigint;
+  /** Max blocks per `eth_getLogs` call; keeps each RPC request small enough to answer. */
+  logScanChunkBlocks: bigint;
+  /** Hard cap on the block span scanned per wallet per poll. */
+  logScanMaxSpanBlocks: bigint;
+  /** How long a closed order's custodial address is still watched for late deposits. */
+  closedWalletWatchMs: number;
 }
 
 /**
@@ -72,6 +84,7 @@ export function loadCchainConfig(env: NodeJS.ProcessEnv = process.env): CchainCo
   if (payoutWalletPrivateKey && !/^0x[0-9a-fA-F]{64}$/.test(payoutWalletPrivateKey)) {
     throw new Error('Invalid CCHAIN_PAYOUT_WALLET_PRIVATE_KEY: must be a 0x-prefixed 32-byte hex string');
   }
+  const payoutUseMasterWallet = env.CCHAIN_PAYOUT_USE_MASTER_WALLET?.trim().toLowerCase() === 'true';
 
   const rawPayoutConfirmations = env.CCHAIN_PAYOUT_CONFIRMATIONS?.trim() || '1';
   if (!/^\d+$/.test(rawPayoutConfirmations)) {
@@ -85,6 +98,24 @@ export function loadCchainConfig(env: NodeJS.ProcessEnv = process.env): CchainCo
   }
   const avaxGasReserveWei = BigInt(rawGasReserve);
 
+  const logScanChunkBlocks = BigInt(
+    parsePositiveInt(env.CCHAIN_LOG_SCAN_CHUNK_BLOCKS, 2_000, 'CCHAIN_LOG_SCAN_CHUNK_BLOCKS')
+  );
+  const logScanMaxSpanBlocks = BigInt(
+    parsePositiveInt(env.CCHAIN_LOG_SCAN_MAX_SPAN_BLOCKS, 20_000, 'CCHAIN_LOG_SCAN_MAX_SPAN_BLOCKS')
+  );
+  if (logScanMaxSpanBlocks < logScanChunkBlocks) {
+    throw new Error(
+      `CCHAIN_LOG_SCAN_MAX_SPAN_BLOCKS (${logScanMaxSpanBlocks}) must be >= ` +
+        `CCHAIN_LOG_SCAN_CHUNK_BLOCKS (${logScanChunkBlocks})`,
+    );
+  }
+  const closedWalletWatchMs = parsePositiveInt(
+    env.CCHAIN_CLOSED_WALLET_WATCH_MS,
+    7 * 24 * 60 * 60 * 1000,
+    'CCHAIN_CLOSED_WALLET_WATCH_MS',
+  );
+
   return {
     rpcBaseUrl,
     chainId,
@@ -97,9 +128,23 @@ export function loadCchainConfig(env: NodeJS.ProcessEnv = process.env): CchainCo
     listenerFallbackUrl: env.CCHAIN_LISTENER_FALLBACK_URL?.trim() || '',
     listenerFallbackAuthToken: env.CCHAIN_LISTENER_FALLBACK_AUTH_TOKEN?.trim() || '',
     payoutWalletPrivateKey,
+    payoutUseMasterWallet,
     payoutConfirmations,
     avaxGasReserveWei,
+    logScanChunkBlocks,
+    logScanMaxSpanBlocks,
+    closedWalletWatchMs,
   };
+}
+
+/** Parse a strictly positive integer env var, falling back to `fallback`. */
+function parsePositiveInt(raw: string | undefined, fallback: number, name: string): number {
+  const value = raw?.trim();
+  if (!value) return fallback;
+  if (!/^\d+$/.test(value) || Number(value) === 0) {
+    throw new Error(`Invalid ${name} '${value}': must be a positive integer`);
+  }
+  return Number(value);
 }
 
 /** Master Wallet public address derived from its private key, when configured. */
